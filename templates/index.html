@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinAnalyzer AI — Financial Statement Analysis</title>
+    <meta name="description" content="AI-powered financial statement analysis with user profiles and history.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=8">
+</head>
+<body>
+
+<!-- ═══ AUTH SCREEN ═══ -->
+<div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="logo-icon">📊</div>
+            <span>Fin<em>Analyzer</em> AI</span>
+        </div>
+        <p class="auth-subtitle">AI-powered financial statement analysis</p>
+
+        <div id="authError" class="auth-error" style="display:none"></div>
+
+        <form id="authForm" onsubmit="return false">
+            <div class="form-group">
+                <label for="authEmail">Email</label>
+                <input type="email" id="authEmail" placeholder="you@company.com" required>
+            </div>
+            <div class="form-group">
+                <label for="authPassword">Password</label>
+                <input type="password" id="authPassword" placeholder="••••••••" required minlength="6">
+            </div>
+            <button class="btn btn-primary btn-block" id="authSubmitBtn" onclick="handleAuth()">
+                Sign In
+            </button>
+        </form>
+
+        <div class="auth-toggle">
+            <span id="authToggleText">Don't have an account?</span>
+            <button class="auth-toggle-btn" id="authToggleBtn" onclick="toggleAuthMode()">Sign Up</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ APP SHELL ═══ -->
+<div id="appShell" class="app-container" style="display:none">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside class="sidebar" id="mainSidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">📊</div>
+            <span>FinAnalyzer</span>
+        </div>
+
+        <div class="sidebar-group">
+            <button class="nav-link" onclick="goHome()" title="Home">
+                🏠
+                <span class="nav-label">Home</span>
+            </button>
+        </div>
+
+        <div class="history-pane" id="historyPane">
+            <h4>Past Analyses</h4>
+            <div class="sidebar-search">
+                <input type="text" id="histSearch" placeholder="Search companies..." onkeyup="filterHistory()">
+            </div>
+            <div id="historyList" class="sidebar-list">
+                <!-- History injected here -->
+            </div>
+        </div>
+
+        <!-- Collapse toggle at bottom -->
+        <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" onclick="toggleHistory()" title="Toggle Sidebar">
+            <span id="collapseIcon">›</span>
+        </button>
+    </aside>
+
+    <!-- ═══ MAIN CONTENT ═══ -->
+    <main class="main-content">
+        <!-- Header Actions -->
+        <header class="main-header">
+            <div class="header-actions">
+                <span class="header-badge">POWERED BY GEMINI 2.5 PRO</span>
+                <div class="user-menu">
+                    <span id="userEmail" class="user-email"></span>
+                    <button class="btn btn-sm btn-ghost" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <div id="mainContent">
+
+            <!-- ─── WIZARD ─── -->
+            <section id="wizardSection" class="wizard-section">
+                <!-- Step indicators -->
+                <div class="wizard-steps-bar">
+                    <div class="wizard-step-indicator active" data-step="1">
+                        <div class="step-num">1</div>
+                        <span>Upload</span>
+                    </div>
+                    <div class="wizard-step-line"></div>
+                    <div class="wizard-step-indicator" data-step="2">
+                        <div class="step-num">2</div>
+                        <span>Options</span>
+                    </div>
+                    <div class="wizard-step-line"></div>
+                    <div class="wizard-step-indicator" data-step="3">
+                        <div class="step-num">3</div>
+                        <span>Review</span>
+                    </div>
+                </div>
+
+                <!-- Step 1: Upload -->
+                <div class="wizard-panel active" id="wizardStep1">
+                    <h2>Upload Financial Statements</h2>
+                    <p class="subtitle">Upload audited PDF statements — Balance Sheet, P&L, Cash Flow</p>
+
+                    <div class="form-group">
+                        <label for="companyNameInput">Company Name <span class="optional">(auto-detected from PDF)</span></label>
+                        <input type="text" id="companyNameInput" placeholder="e.g. Reliance Industries Ltd">
+                    </div>
+
+                    <div class="dropzone" id="dropzone">
+                        <input type="file" id="fileInput" accept=".pdf" multiple>
+                        <div class="dropzone-icon">📁</div>
+                        <h3>Drop your PDFs here</h3>
+                        <p>or click to browse · Supports multiple files</p>
+                    </div>
+
+                    <div class="file-list" id="fileList" style="display:none"></div>
+
+                    <div class="wizard-actions">
+                        <div></div>
+                        <button class="btn btn-primary" id="toStep2Btn" disabled onclick="goToStep(2)">
+                            Next: Analysis Options →
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Options -->
+                <div class="wizard-panel" id="wizardStep2">
+                    <h2>Analysis Options</h2>
+                    <p class="subtitle">Choose which analysis modules to run</p>
+
+                    <div class="options-grid">
+                        <label class="option-card">
+                            <input type="checkbox" checked data-module="background">
+                            <div class="option-body">
+                                <span class="option-icon">🏢</span>
+                                <span class="option-label">Company Background</span>
+                                <span class="option-desc">Industry, products, management</span>
+                            </div>
+                        </label>
+                        <label class="option-card">
+                            <input type="checkbox" checked data-module="competitors">
+                            <div class="option-body">
+                                <span class="option-icon">⚔️</span>
+                                <span class="option-label">Competitor Analysis</span>
+                                <span class="option-desc">Market position & rivals</span>
+                            </div>
+                        </label>
+                        <label class="option-card">
+                            <input type="checkbox" checked data-module="ratios">
+                            <div class="option-body">
+                                <span class="option-icon">📊</span>
+                                <span class="option-label">Financial Ratios</span>
+                                <span class="option-desc">Liquidity, profitability, leverage</span>
+                            </div>
+                        </label>
+                        <label class="option-card">
+                            <input type="checkbox" checked data-module="risks">
+                            <div class="option-body">
+                                <span class="option-icon">⚠️</span>
+                                <span class="option-label">Risk Assessment</span>
+                                <span class="option-desc">Risk factors & investment pros/cons</span>
+                            </div>
+                        </label>
+                        <label class="option-card">
+                            <input type="checkbox" checked data-module="recommendation">
+                            <div class="option-body">
+                                <span class="option-icon">💡</span>
+                                <span class="option-label">Investment Recommendation</span>
+                                <span class="option-desc">BUY / HOLD / SELL verdict</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="form-group" style="margin-top:24px">
+                        <label for="emailInput">Email for Report Delivery <span class="optional">(optional)</span></label>
+                        <input type="email" id="emailInput" placeholder="recipient@company.com">
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn btn-ghost" onclick="goToStep(1)">← Back</button>
+                        <button class="btn btn-primary" onclick="goToStep(3)">Next: Review →</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Review -->
+                <div class="wizard-panel" id="wizardStep3">
+                    <h2>Review & Launch</h2>
+                    <p class="subtitle">Confirm your selections before starting</p>
+
+                    <div class="review-card">
+                        <div class="review-row">
+                            <span class="review-label">Company</span>
+                            <span class="review-value" id="reviewCompany">—</span>
+                        </div>
+                        <div class="review-row">
+                            <span class="review-label">Files</span>
+                            <span class="review-value" id="reviewFiles">—</span>
+                        </div>
+                        <div class="review-row">
+                            <span class="review-label">Modules</span>
+                            <span class="review-value" id="reviewModules">—</span>
+                        </div>
+                        <div class="review-row">
+                            <span class="review-label">Email</span>
+                            <span class="review-value" id="reviewEmail">—</span>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="btn btn-ghost" onclick="goToStep(2)">← Back</button>
+                        <button class="btn btn-primary btn-launch" id="launchBtn" onclick="startAnalysis()">
+                            🚀 Start Analysis
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── PROGRESS & VALIDATION SPLIT VIEW ─── -->
+            <section id="progressSection" style="display:none">
+                <div class="progress-split-layout" id="progressSplitLayout">
+                    <!-- Left Side: Workflow Progress -->
+                    <div class="progress-left-pane">
+                        <div class="progress-header">
+                            <h2>🤖 Analysis in Progress</h2>
+                            <p>Gemini 2.5 Pro is analyzing your financial statements...</p>
+                        </div>
+                        <div class="progress-steps" id="progressSteps"></div>
+                    </div>
+                    
+                    <!-- Right Side: Maths Validation (Hidden until needed) -->
+                    <div class="validation-right-pane" id="validationRightPane" style="display:none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <h3>🔍 Validate Extracted Financials</h3>
+                            <button class="btn btn-sm btn-ghost" onclick="exportToExcel()">⬇️ Download Excel</button>
+                        </div>
+                        <p class="subtitle" style="margin-bottom: 16px;">
+                            Review the extracted figures. Values marked in <strong style="color:var(--danger)">Red</strong> indicate math errors.
+                        </p>
+                        
+                        <div id="validationTableContainer" style="flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
+                            <!-- Dynamic editable table will be injected here -->
+                        </div>
+
+                        <div class="modal-actions" style="margin-top: 24px;">
+                            <div id="validationWarning" style="color:var(--danger); font-size: 14px; font-weight: 500; display:none;"></div>
+                            <button class="btn btn-primary" id="approveFinancialsBtn" onclick="approveAndContinue()">✓ Approve & Continue</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ─── RESULTS ─── -->
+            <section id="resultsSection" style="display:none"></section>
+
+        </div> <!-- /#mainContent -->
+    </main> <!-- /.main-content -->
+</div> <!-- /#appShell -->
+
+<!-- Email Modal -->
+<div class="modal-overlay" id="emailModal">
+    <div class="modal">
+        <h3>📧 Send Report</h3>
+        <p>Enter the email address to send the analysis report:</p>
+        <input type="email" class="form-input" id="modalEmailInput" placeholder="recipient@example.com">
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeEmailModal()">Cancel</button>
+            <button class="btn btn-primary" id="sendEmailBtn" onclick="sendEmail()">Send Report</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Supabase JS client (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- SheetJS for Excel formatting -->
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="/static/app.js?v=2"></script>
+
+</body>
+</html>

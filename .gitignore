@@ -1,0 +1,17 @@
+# Secrets — never commit
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Runtime directories (generated at runtime, potentially large)
+uploads/
+reports/
+
+# OS
+.DS_Store
+Thumbs.db
