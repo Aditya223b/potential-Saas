@@ -43,7 +43,11 @@ from rate_limiter import rate_limiter
 
 
 class AnalysisJob:
-    """Tracks the state of an analysis job."""
+    """Tracks the state of an analysis job.
+    
+    Every state change is persisted to Supabase in a background thread so
+    jobs survive Railway container restarts.
+    """
 
     def __init__(self, job_id: str, filenames: list[str], user_id: str = None):
         self.job_id = job_id
@@ -57,17 +61,42 @@ class AnalysisJob:
         self.parsed_text = None
         self.background = None
         self.competitors = None
+        self.gemini_files = []
         self.report_path = None   # path to generated DOCX
         self.error = None
         self.created_at = datetime.now().isoformat()
+        # Persist job row to Supabase on creation
+        self._persist_async({"status": "pending", "filenames": filenames})
+
+    def _persist_async(self, fields: dict):
+        """Fire-and-forget: write fields to Supabase jobs table."""
+        def _write():
+            try:
+                from supabase_client import update_job
+                update_job(self.job_id, **fields)
+            except Exception as e:
+                logger.warning(f"[{self.job_id}] Supabase persist failed: {e}")
+        threading.Thread(target=_write, daemon=True).start()
 
     def add_progress(self, step: str, message: str, done: bool = False):
-        self.progress.append({
+        entry = {
             "step": step,
             "message": message,
             "done": done,
             "timestamp": datetime.now().isoformat(),
+        }
+        self.progress.append(entry)
+        # Persist progress + current status to Supabase
+        self._persist_async({
+            "status": self.status,
+            "progress": self.progress,
+            "error": self.error,
         })
+
+    def set_status(self, status: str):
+        """Update status and persist immediately."""
+        self.status = status
+        self._persist_async({"status": status})
 
     def to_dict(self):
         return {
@@ -382,6 +411,10 @@ def upload():
     job = AnalysisJob(job_id, filenames, user_id=user_id)
     _jobs[job_id] = job
 
+    # Step 1: Persist job to Supabase immediately
+    from supabase_client import create_job
+    create_job(job_id, user_id, filenames)
+
     rate_limiter.record(user_id)
 
     thread = threading.Thread(target=run_extraction_pipeline, args=(job, pdf_paths))
@@ -425,14 +458,20 @@ def progress(job_id):
     """SSE endpoint for real-time progress updates."""
     def generate():
         job = _jobs.get(job_id)
+        
+        # Fallback: if job not in memory, it might be in Supabase (container restart)
+        db_job_data = None
         if not job:
-            yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
-            return
+            from supabase_client import get_job
+            db_job_data = get_job(job_id)
+            if not db_job_data:
+                yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                return
 
         seen = 0
-        heartbeat_interval = 15  # Send heartbeat every 15s to prevent proxy timeout
+        heartbeat_interval = 15
         last_heartbeat = time.time()
-        max_wait = 600  # 10 min max SSE session
+        max_wait = 600
         start_time = time.time()
 
         while True:
@@ -440,26 +479,35 @@ def progress(job_id):
                 yield f"data: {json.dumps({'step': 'timeout', 'message': 'SSE session timed out', 'done': True})}\n\n"
                 return
 
-            if len(job.progress) > seen:
-                for event in job.progress[seen:]:
+            # Get current state (either from memory object or fresh from DB)
+            if job:
+                current_progress = job.progress
+                current_status = job.status
+            else:
+                from supabase_client import get_job
+                db_job_data = get_job(job_id)
+                current_progress = db_job_data.get("progress", [])
+                current_status = db_job_data.get("status", "pending")
+
+            if len(current_progress) > seen:
+                for event in current_progress[seen:]:
                     yield f"data: {json.dumps(event)}\n\n"
-                seen = len(job.progress)
+                seen = len(current_progress)
                 last_heartbeat = time.time()
 
-            if job.status == "waiting_for_user":
-                yield f"data: {json.dumps({'step': 'waiting_for_user', 'status': job.status, 'done': True})}\n\n"
+            if current_status == "waiting_for_user":
+                yield f"data: {json.dumps({'step': 'waiting_for_user', 'status': current_status, 'done': True})}\n\n"
                 return
 
-            if job.status in ("completed", "failed"):
-                yield f"data: {json.dumps({'step': 'done', 'status': job.status, 'done': True})}\n\n"
+            if current_status in ("completed", "failed"):
+                yield f"data: {json.dumps({'step': 'done', 'status': current_status, 'done': True})}\n\n"
                 return
 
-            # Send heartbeat to keep connection alive through Render's proxy
             if time.time() - last_heartbeat > heartbeat_interval:
                 yield f": heartbeat\n\n"
                 last_heartbeat = time.time()
 
-            time.sleep(0.5)
+            time.sleep(1.0 if not job else 0.5) # Poll slower if using DB fallback
 
     return Response(
         stream_with_context(generate()),
@@ -472,9 +520,16 @@ def progress(job_id):
 def result(job_id):
     """Get the full analysis result."""
     job = _jobs.get(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-    return jsonify(job.to_dict())
+    if job:
+        return jsonify(job.to_dict())
+    
+    # Fallback to Supabase
+    from supabase_client import get_job
+    db_job = get_job(job_id)
+    if db_job:
+        return jsonify(db_job)
+        
+    return jsonify({"error": "Job not found"}), 404
 
 
 @app.route("/api/download/<job_id>")

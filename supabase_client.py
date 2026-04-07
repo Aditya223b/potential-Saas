@@ -38,6 +38,62 @@ def get_supabase() -> Client:
     return _get_client()
 
 
+# ── Job Persistence ───────────────────────────────────────────────────────────
+# These functions persist analysis job state to the `jobs` table so jobs
+# survive container restarts on Railway.
+
+def create_job(job_id: str, user_id: str | None, filenames: list[str]) -> bool:
+    """Insert a new job row when analysis starts."""
+    try:
+        _get_admin_client().table("jobs").insert({
+            "job_id": job_id,
+            "user_id": user_id,
+            "status": "pending",
+            "progress": [],
+            "filenames": filenames,
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"⚠️  create_job failed: {e}")
+        return False
+
+
+def update_job(job_id: str, **fields) -> bool:
+    """Partial update any fields on a job row."""
+    try:
+        _get_admin_client().table("jobs").update(fields).eq("job_id", job_id).execute()
+        return True
+    except Exception as e:
+        print(f"⚠️  update_job failed: {e}")
+        return False
+
+
+def get_job(job_id: str) -> dict | None:
+    """Fetch a job row by ID. Returns None if not found."""
+    try:
+        result = (
+            _get_admin_client().table("jobs")
+            .select("*")
+            .eq("job_id", job_id)
+            .single()
+            .execute()
+        )
+        return result.data
+    except Exception as e:
+        print(f"⚠️  get_job failed: {e}")
+        return None
+
+
+def delete_job(job_id: str) -> bool:
+    """Delete a job row (called after results are fetched to keep table clean)."""
+    try:
+        _get_admin_client().table("jobs").delete().eq("job_id", job_id).execute()
+        return True
+    except Exception as e:
+        print(f"⚠️  delete_job failed: {e}")
+        return False
+
+
 def verify_user_token(token: str) -> dict | None:
     """
     Verify a Supabase JWT access token and return the user info.
