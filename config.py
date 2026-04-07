@@ -3,7 +3,6 @@ Configuration loader — reads .env and provides typed access to all settings.
 """
 
 import os
-import sys
 from dotenv import load_dotenv
 
 # Load .env from the same directory as this file
@@ -11,12 +10,10 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 
 def _require(key: str) -> str:
-    """Return env var or exit with a helpful message."""
+    """Return env var or warn — never crash on import so the health endpoint stays alive."""
     val = os.getenv(key, "").strip()
     if not val:
-        print(f"❌  Missing required environment variable: {key}")
-        print(f"   Copy .env.example → .env and fill in the values.")
-        sys.exit(1)
+        print(f"⚠️  Missing environment variable: {key} — set it in Railway Variables tab.")
     return val
 
 
@@ -44,12 +41,10 @@ SMTP_PORT: int = int(_get("SMTP_PORT", "587") or "587")
 
 
 def get_smtp_credentials() -> tuple[str, str]:
-    """Return (email, app_password). Exits if not configured."""
+    """Return (email, app_password). Raises RuntimeError if not configured."""
     email = _get("SMTP_EMAIL")
     password = _get("SMTP_APP_PASSWORD")
     if not email or not password:
-        print("❌  Email sending requires SMTP_EMAIL and SMTP_APP_PASSWORD in .env")
-        print("   Generate an App Password at: https://myaccount.google.com/apppasswords")
-        sys.exit(1)
+        raise RuntimeError("Email sending requires SMTP_EMAIL and SMTP_APP_PASSWORD env vars.")
     return email, password
 
