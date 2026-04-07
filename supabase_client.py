@@ -9,15 +9,33 @@ from datetime import datetime
 from config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY
 from supabase import create_client, Client
 
-# Anon client — used only for auth token verification
-_supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-# Service role client — bypasses RLS for all backend DB/storage operations
-_supabase_admin: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+# Lazy clients — only initialized when first used, so a missing env var
+# doesn't crash the app at import time (prevents Railway startup failures)
+_supabase: Client | None = None
+_supabase_admin: Client | None = None
+
+
+def _get_client() -> Client:
+    global _supabase
+    if _supabase is None:
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            raise RuntimeError("SUPABASE_URL and SUPABASE_KEY env vars are required")
+        _supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    return _supabase
+
+
+def _get_admin_client() -> Client:
+    global _supabase_admin
+    if _supabase_admin is None:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY env vars are required")
+        _supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return _supabase_admin
 
 
 def get_supabase() -> Client:
     """Return the Supabase client instance."""
-    return _supabase
+    return _get_client()
 
 
 def verify_user_token(token: str) -> dict | None:
@@ -26,7 +44,7 @@ def verify_user_token(token: str) -> dict | None:
     Returns None if invalid.
     """
     try:
-        res = _supabase.auth.get_user(token)
+        res = _get_client().auth.get_user(token)
         if res and res.user:
             return {
                 "id": str(res.user.id),
@@ -63,7 +81,7 @@ def save_analysis(
             "filenames": filenames,
         }
 
-        result = _supabase_admin.table("analyses").insert(row).execute()
+        result = _get_admin_client().table("analyses").insert(row).execute()
 
         if result.data and len(result.data) > 0:
             print(f"  ✅ Analysis saved to Supabase (id: {result.data[0].get('id', '?')})")
@@ -82,7 +100,7 @@ def get_user_analyses(user_id: str, limit: int = 50) -> list[dict]:
     """
     try:
         result = (
-            _supabase_admin.table("analyses")
+            _get_admin_client().table("analyses")
             .select("id, company_name, job_id, recommendation, confidence, filenames, created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
@@ -102,7 +120,7 @@ def get_analysis(analysis_id: str, user_id: str) -> dict | None:
     """
     try:
         result = (
-            _supabase_admin.table("analyses")
+            _get_admin_client().table("analyses")
             .select("*")
             .eq("id", analysis_id)
             .eq("user_id", user_id)
@@ -124,7 +142,7 @@ def upload_report_file(user_id: str, job_id: str, file_path: str) -> str | None:
         storage_path = f"{user_id}/{job_id}.docx"
 
         with open(file_path, "rb") as f:
-            _supabase_admin.storage.from_("reports").upload(
+            _get_admin_client().storage.from_("reports").upload(
                 path=storage_path,
                 file=f,
                 file_options={"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
@@ -144,7 +162,7 @@ def get_report_download_url(storage_path: str, expires_in: int = 3600) -> str | 
     Default expiry: 1 hour.
     """
     try:
-        result = _supabase_admin.storage.from_("reports").create_signed_url(
+        result = _get_admin_client().storage.from_("reports").create_signed_url(
             path=storage_path,
             expires_in=expires_in,
         )
@@ -157,7 +175,7 @@ def get_report_download_url(storage_path: str, expires_in: int = 3600) -> str | 
 def delete_analysis(analysis_id: str, user_id: str) -> bool:
     """Delete an analysis by ID (RLS enforced)."""
     try:
-        _supabase_admin.table("analyses").delete().eq("id", analysis_id).eq("user_id", user_id).execute()
+        _get_admin_client().table("analyses").delete().eq("id", analysis_id).eq("user_id", user_id).execute()
         return True
     except Exception as e:
         print(f"  ⚠️  Failed to delete analysis: {e}")
