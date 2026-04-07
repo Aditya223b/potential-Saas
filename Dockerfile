@@ -34,20 +34,20 @@ COPY . .
 # Create runtime directories with proper permissions
 RUN mkdir -p uploads reports && chmod -R 777 uploads reports
 
-# Hugging Face Spaces REQUIRES port 7860
+# Hugging Face uses 7860, Railway injects $PORT dynamically
 EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
+    CMD curl -f http://localhost:${PORT:-7860}/health || exit 1
 
-# Start with gunicorn on port 7860
-CMD ["gunicorn", "app:app", \
-     "--bind", "0.0.0.0:7860", \
-     "--workers", "2", \
-     "--threads", "4", \
-     "--timeout", "300", \
-     "--keep-alive", "5", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--log-level", "info"]
+# Shell form (not JSON array) so $PORT is expanded at runtime
+CMD gunicorn app:app \
+    --bind 0.0.0.0:${PORT:-7860} \
+    --workers 2 \
+    --threads 4 \
+    --timeout 300 \
+    --keep-alive 5 \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info
