@@ -592,4 +592,5 @@ def report_url(analysis_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, threaded=True, use_reloader=False)
+    port = int(os.environ.get("PORT", 7860))
+    app.run(debug=False, port=port, threaded=True, use_reloader=False)

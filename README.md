@@ -1,75 +1,44 @@
-# 📊 Financial Statement Analysis Automation
+---
+title: Financial Analyzer
+emoji: 📊
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+pinned: false
+license: mit
+short_description: AI-powered financial statement analysis & investment reports
+---
 
-AI-powered automation that analyzes audited financial statements and generates comprehensive investment analysis reports.
+# 📊 Financial Statement Analyzer
+
+AI-powered automation that analyses audited financial statements (Balance Sheet, P&L, Cash Flow) and generates comprehensive investment analysis reports.
 
 ## What It Does
 
-1. **Parses** audited financial statement PDFs (Balance Sheet, P&L, Cash Flow)
+1. **Uploads** your PDFs directly to Gemini's native File API for accurate extraction
 2. **Scrapes** the company's website and competitor websites for background research
-3. **Extracts** key financial figures using Gemini AI
-4. **Calculates** 20+ financial ratios (Liquidity, Profitability, R' Ratios, Solvency, Efficiency, Valuation)
-5. **Analyzes** financials, risks, and investment potential using AI
-6. **Generates** a professional DOCX report with tables and color-coded indicators
-7. **Emails** the report to the specified recipient
+3. **Extracts** multi-year financial figures with AI
+4. **Validates** extracted data via a human-in-the-loop review step
+5. **Calculates** 20+ financial ratios (Liquidity, Profitability, R' Ratios, Solvency, Efficiency)
+6. **Generates** a professional DOCX investment proposal report
 
-## Quick Start
+## Setup (Environment Variables)
 
-### 1. Setup
+Set these secrets in your Hugging Face Space settings:
 
-```bash
-cd /Users/ranjan/Desktop/some/financial_analyzer
+| Variable | Where to get it |
+|----------|----------------|
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
+| `SUPABASE_URL` | Supabase project → Settings → API |
+| `SUPABASE_KEY` | Supabase project → Settings → API (anon key) |
+| `SUPABASE_SERVICE_KEY` | Supabase project → Settings → API (service_role key) |
+| `SMTP_EMAIL` | Your Gmail address |
+| `SMTP_APP_PASSWORD` | [Google App Passwords](https://myaccount.google.com/apppasswords) |
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure credentials
-cp .env.example .env
-# Edit .env and fill in:
-#   - GEMINI_API_KEY (from https://aistudio.google.com/apikey)
-#   - SMTP_EMAIL (your Gmail address)
-#   - SMTP_APP_PASSWORD (from https://myaccount.google.com/apppasswords)
-```
-
-### 2. Run
-
-```bash
-# Analyze with email delivery
-python main.py \
-  --pdf "../DSRI FY24-25 Balance Sheet.pdf" "../DSRI FY24-25 P&L Statement.pdf" \
-  --email "recipient@example.com"
-
-# Generate report only (no email)
-python main.py \
-  --pdf "../DSRI FY24-25 Balance Sheet.pdf" \
-  --no-email
-
-# Custom output directory
-python main.py \
-  --pdf "statement.pdf" \
-  --email "team@company.com" \
-  --output-dir "./reports"
-```
-
-## Report Sections
-
-| # | Section | Contents |
-|---|---------|----------|
-| 1 | Cover Page | Company name, date, confidentiality notice |
-| 2 | Executive Summary | High-level financial health overview |
-| 3 | Company Background | Industry, products, management, milestones |
-| 4 | Competitor Analysis | Top competitors, market positioning, comparison table |
-| 5 | Financial Summary | Key figures table (Revenue, EBITDA, Net Income, etc.) |
-| 6 | Financial Ratios | 20+ ratios with benchmarks and PASS/CAUTION/FAIL status |
-| 7 | Risk Factors | Categorized risks with severity and mitigation |
-| 8 | Investment Pros | Strengths and growth drivers |
-| 9 | Recommendation | BUY/HOLD/SELL verdict with detailed rationale |
-| 10 | Disclaimer | Standard financial advice disclaimer |
-
-## Financial Ratios Calculated
+## Financial Ratios
 
 - **Liquidity**: Current Ratio, Quick Ratio, Cash Ratio
 - **Profitability**: Gross Margin, Net Margin, EBITDA Margin, ROE, ROA
 - **R' Ratios**: ROCE, ROIC, ROI, Return on Net Worth
 - **Solvency**: Debt-to-Equity, Interest Coverage, Debt-to-Assets
 - **Efficiency**: Asset Turnover, Inventory Turnover, Receivables Turnover
-- **Valuation**: EPS, Book Value per Share, P/E Ratio
