@@ -286,21 +286,34 @@ def run_downstream_pipeline(job: AnalysisJob):
         # Step 11: Save to Supabase (if user is authenticated)
         if job.user_id:
             job.add_progress("save", "💾 Saving to your profile...")
-            from supabase_client import save_analysis, upload_report_file
+            logger.info(f"[{job.job_id}] Step 11: Saving to Supabase...")
 
-            storage_path = None
-            if report_path and os.path.exists(report_path):
-                storage_path = upload_report_file(job.user_id, job.job_id, report_path)
+            def _do_save():
+                from supabase_client import save_analysis, upload_report_file
+                storage_path = None
+                if report_path and os.path.exists(report_path):
+                    logger.info(f"[{job.job_id}] Uploading DOCX to Supabase Storage...")
+                    storage_path = upload_report_file(job.user_id, job.job_id, report_path)
+                    logger.info(f"[{job.job_id}] DOCX upload done: {storage_path}")
+                save_analysis(
+                    user_id=job.user_id,
+                    company_name=company_name,
+                    job_id=job.job_id,
+                    analysis_data=analysis,
+                    filenames=job.filenames,
+                    report_storage_path=storage_path,
+                )
+                logger.info(f"[{job.job_id}] Supabase save complete")
 
-            save_analysis(
-                user_id=job.user_id,
-                company_name=company_name,
-                job_id=job.job_id,
-                analysis_data=analysis,
-                filenames=job.filenames,
-                report_storage_path=storage_path,
-            )
-            job.add_progress("save", "✅ Saved to your profile", done=True)
+            save_thread = threading.Thread(target=_do_save, daemon=True)
+            save_thread.start()
+            save_thread.join(timeout=30)  # Wait max 30s for Supabase
+
+            if save_thread.is_alive():
+                logger.warning(f"[{job.job_id}] Supabase save timed out after 30s — skipping")
+                job.add_progress("save", "⚠️ Profile save timed out (report still generated)", done=True)
+            else:
+                job.add_progress("save", "✅ Saved to your profile", done=True)
 
     except Exception as e:
         job.error = str(e)
