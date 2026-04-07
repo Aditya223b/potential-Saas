@@ -111,7 +111,33 @@ def optional_auth():
     return None
 
 
-# ── Analysis Pipeline ────────────────────────────────────────────────────────
+# ── Analysis Pipeline ────────────────────────────────────────────────────────────────────────
+
+
+def _cleanup_gemini_files(gemini_files: list[str]):
+    """Delete temporary files from Gemini servers after processing."""
+    try:
+        from google import genai
+        from config import GEMINI_API_KEY
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        for ref in gemini_files:
+            try:
+                client.files.delete(name=ref)
+                print(f"  🗑️  Cleaned up Gemini file: {ref}")
+            except Exception:
+                pass  # Best-effort cleanup
+    except Exception:
+        pass
+
+
+def _cleanup_local_uploads(pdf_paths: list[str]):
+    """Remove uploaded PDFs from local disk after processing."""
+    for p in pdf_paths:
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
 
 
 def run_extraction_pipeline(job: AnalysisJob, pdf_paths: list[str]):
@@ -171,6 +197,9 @@ def run_extraction_pipeline(job: AnalysisJob, pdf_paths: list[str]):
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
         import traceback
         traceback.print_exc()
+    finally:
+        # Clean up local uploaded files to save disk on Render
+        _cleanup_local_uploads(pdf_paths)
 
 def run_downstream_pipeline(job: AnalysisJob):
     """Resume pipeline after user approves the financials."""
@@ -260,9 +289,18 @@ def run_downstream_pipeline(job: AnalysisJob):
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
         import traceback
         traceback.print_exc()
+    finally:
+        # Clean up Gemini files after downstream completes or fails
+        _cleanup_gemini_files(getattr(job, "gemini_files", []))
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+# ── Routes ───────────────────────────────────────────────────────────────────────────
+
+
+@app.route("/health")
+def health():
+    """Health check endpoint for Render."""
+    return jsonify({"status": "ok"})
 
 
 @app.route("/")
@@ -360,19 +398,34 @@ def progress(job_id):
             return
 
         seen = 0
+        heartbeat_interval = 15  # Send heartbeat every 15s to prevent proxy timeout
+        last_heartbeat = time.time()
+        max_wait = 600  # 10 min max SSE session
+        start_time = time.time()
+
         while True:
+            if time.time() - start_time > max_wait:
+                yield f"data: {json.dumps({'step': 'timeout', 'message': 'SSE session timed out', 'done': True})}\n\n"
+                return
+
             if len(job.progress) > seen:
                 for event in job.progress[seen:]:
                     yield f"data: {json.dumps(event)}\n\n"
                 seen = len(job.progress)
+                last_heartbeat = time.time()
 
             if job.status == "waiting_for_user":
                 yield f"data: {json.dumps({'step': 'waiting_for_user', 'status': job.status, 'done': True})}\n\n"
                 return
-                
+
             if job.status in ("completed", "failed"):
                 yield f"data: {json.dumps({'step': 'done', 'status': job.status, 'done': True})}\n\n"
                 return
+
+            # Send heartbeat to keep connection alive through Render's proxy
+            if time.time() - last_heartbeat > heartbeat_interval:
+                yield f": heartbeat\n\n"
+                last_heartbeat = time.time()
 
             time.sleep(0.5)
 

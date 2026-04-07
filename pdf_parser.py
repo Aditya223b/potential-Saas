@@ -1,76 +1,85 @@
 """
 PDF Parser — Extracts text and tabular data from audited financial statement PDFs.
-Uses pdfplumber for text-based PDFs and Gemini Vision for scanned/image PDFs.
+Uses Gemini File API for native document understanding.
 """
 
 import io
 import os
 import re
-import pdfplumber
-from PIL import Image
+import time
 
 
-def _is_scanned_pdf(pdf) -> bool:
-    """Check if a PDF is image-based (scanned) by testing the first few pages."""
-    text_chars = 0
-    pages_to_check = min(3, len(pdf.pages))
-    for i in range(pages_to_check):
-        text = pdf.pages[i].extract_text() or ""
-        text_chars += len(text.strip())
-    return text_chars < 50
-
-
-def _upload_to_gemini(filepath: str) -> str:
+def _upload_to_gemini(filepath: str, max_retries: int = 3) -> str:
     """
     Uploads a PDF securely to Gemini's internal structured File API.
     Returns the file reference (e.g. 'files/abcdef123').
+    Includes retry logic for cloud deployment resilience.
     """
     from google import genai
-    import time
     from config import GEMINI_API_KEY
-    
+
     client = genai.Client(api_key=GEMINI_API_KEY)
-    print(f"  📤 Uploading {os.path.basename(filepath)} to Gemini File API natively...")
-    uploaded_file = client.files.upload(file=filepath)
-    
-    # Wait until processing is complete
-    while uploaded_file.state == "PROCESSING":
-        time.sleep(2)
-        uploaded_file = client.files.get(name=uploaded_file.name)
-        
-    print(f"    ✅ Uploaded as {uploaded_file.name}")
-    return uploaded_file.name
-    for i in range(pages_to_check):
-        text = pdf.pages[i].extract_text() or ""
-        text_chars += len(text.strip())
-    return text_chars < 50  # Less than 50 chars across first 3 pages = likely scanned
+    basename = os.path.basename(filepath)
+    print(f"  📤 Uploading {basename} to Gemini File API...")
+
+    for attempt in range(max_retries):
+        try:
+            uploaded_file = client.files.upload(file=filepath)
+
+            # Wait until processing is complete (with timeout)
+            wait_start = time.time()
+            while uploaded_file.state == "PROCESSING":
+                if time.time() - wait_start > 120:  # 2 min timeout
+                    raise TimeoutError(f"File {basename} stuck in PROCESSING state for > 2 min")
+                time.sleep(3)
+                uploaded_file = client.files.get(name=uploaded_file.name)
+
+            if hasattr(uploaded_file, 'state') and uploaded_file.state == "FAILED":
+                raise RuntimeError(f"Gemini rejected file {basename}: processing failed")
+
+            print(f"    ✅ Uploaded as {uploaded_file.name}")
+            return uploaded_file.name
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = (attempt + 1) * 5
+                print(f"    ⚠️  Upload attempt {attempt + 1} failed for {basename}: {e}")
+                print(f"    ⏳ Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"Failed to upload {basename} after {max_retries} attempts: {e}")
 
 
-def parse_financial_pdf(filepath: str) -> dict:
+def _detect_company_name_from_pdf(filepath: str) -> str | None:
     """
-    Parse a financial statement PDF very quickly for heuristic text (company name).
-    It no longer attempts brutal force OCR, it just skims.
+    Try to quickly extract the company name from a PDF via pdfplumber.
+    Falls back gracefully if pdfplumber can't handle the file (scanned PDFs).
     """
-    company_name = None
-    full_text_parts = []
-
     try:
+        import pdfplumber
         with pdfplumber.open(filepath) as pdf:
-            if not _is_scanned_pdf(pdf):
-                for i, page in enumerate(pdf.pages):
-                    if i > 5: break # Only skim first few pages for names to save time
-                    text = page.extract_text() or ""
-                    full_text_parts.append(text)
-                    if not company_name:
-                        company_name = _detect_company_name(text)
-    except Exception as e:
-        print(f"    ⚠️  Fast skimming failed for {filepath}: {e}")
+            # Check if it's a scanned PDF (very little extractable text)
+            text_chars = 0
+            pages_to_check = min(3, len(pdf.pages))
+            for i in range(pages_to_check):
+                text = pdf.pages[i].extract_text() or ""
+                text_chars += len(text.strip())
 
-    return {
-        "filepath": filepath,
-        "company_name": company_name,
-        "full_text": "\n\n".join(full_text_parts)
-    }
+            if text_chars < 50:
+                return None  # Scanned PDF — can't skim locally
+
+            # Skim first few pages for company name
+            for i, page in enumerate(pdf.pages):
+                if i > 3:
+                    break
+                text = page.extract_text() or ""
+                name = _detect_company_name(text)
+                if name:
+                    return name
+    except Exception as e:
+        print(f"    ⚠️  pdfplumber skimming failed for {os.path.basename(filepath)}: {e}")
+
+    return None
 
 
 def _detect_company_name(text: str) -> str | None:
@@ -101,12 +110,12 @@ def _detect_company_name(text: str) -> str | None:
 def parse_multiple_pdfs(filepaths: list[str]) -> dict:
     """
     Parse multiple PDFs natively using Gemini File API.
-    
+
     Returns:
         {
             "company_name": str,
-            "full_text":    str (heuristic skimmed),
-            "gemini_files": list[str] (list of uploaded file names)
+            "full_text":    str (heuristic skimmed, may be empty for scanned PDFs),
+            "gemini_files": list[str] (list of uploaded Gemini file references)
         }
     """
     company_name = None
@@ -114,21 +123,18 @@ def parse_multiple_pdfs(filepaths: list[str]) -> dict:
     gemini_files = []
 
     for fp in filepaths:
-        print(f"  📄 Processing: {fp}")
-        
-        # Fast skim for text/company name
-        result = parse_financial_pdf(fp)
-        if not company_name and result["company_name"]:
-            company_name = result["company_name"]
-            
-        combined_text.append(result.get("full_text", ""))
-        
-        # Substantially upload to Gemini
+        print(f"  📄 Processing: {os.path.basename(fp)}")
+
+        # Quick local skim for company name (best-effort)
+        if not company_name:
+            company_name = _detect_company_name_from_pdf(fp)
+
+        # Upload to Gemini natively (the real extraction power)
         gemini_file_ref = _upload_to_gemini(fp)
         gemini_files.append(gemini_file_ref)
 
     return {
         "company_name": company_name or "Unknown Company",
-        "full_text": "\n\n--- NEXT DOCUMENT ---\n\n".join(combined_text),
+        "full_text": "",
         "gemini_files": gemini_files
     }

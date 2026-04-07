@@ -19,7 +19,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-TIMEOUT = 15  # seconds
+TIMEOUT = 10  # seconds — keep short for cloud deployments
 
 
 def search_company_website(company_name: str) -> str | None:
@@ -32,7 +32,7 @@ def search_company_website(company_name: str) -> str | None:
     params = {"q": query, "num": 5}
 
     try:
-        resp = requests.get(search_url, params=params, headers=HEADERS, timeout=TIMEOUT)
+        resp = requests.get(search_url, params=params, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -139,53 +139,51 @@ def scrape_company_info(company_name: str) -> dict:
     """
     Full pipeline: find the company website, scrape it, and gather
     background data for AI analysis.
-
-    Returns:
-        {
-            "company_name":    str,
-            "website_url":     str | None,
-            "homepage":        dict (scraped page data),
-            "about_page":      dict | None,
-            "raw_data":        str (combined text for AI),
-        }
+    Designed to fail gracefully — web research is supplementary, never blocking.
     """
-    print(f"  🌐 Searching for {company_name} website...")
-    website_url = search_company_website(company_name)
-
     result = {
         "company_name": company_name,
-        "website_url": website_url,
+        "website_url": None,
         "homepage": {},
         "about_page": None,
         "raw_data": "",
     }
 
-    if not website_url:
-        print(f"  ⚠️  Could not find website for {company_name}")
-        result["raw_data"] = f"No website found for {company_name}. Analysis will rely on financial statement data and AI knowledge."
-        return result
+    try:
+        print(f"  🌐 Searching for {company_name} website...")
+        website_url = search_company_website(company_name)
+        result["website_url"] = website_url
 
-    print(f"  🌐 Scraping homepage: {website_url}")
-    homepage = scrape_page(website_url)
-    result["homepage"] = homepage
+        if not website_url:
+            print(f"  ⚠️  Could not find website for {company_name} (may be blocked on cloud)")
+            result["raw_data"] = f"No website found for {company_name}. Analysis will rely on financial statement data and AI knowledge."
+            return result
 
-    print(f"  🌐 Looking for About page...")
-    about = scrape_about_page(website_url)
-    result["about_page"] = about
+        print(f"  🌐 Scraping homepage: {website_url}")
+        homepage = scrape_page(website_url)
+        result["homepage"] = homepage
 
-    # Combine into a single text block for AI
-    parts = [
-        f"=== COMPANY WEBSITE: {company_name} ===",
-        f"URL: {website_url}",
-        f"Title: {homepage.get('title', '')}",
-        f"Description: {homepage.get('description', '')}",
-        f"\n--- Homepage Content ---\n{homepage.get('content', '')}",
-    ]
+        print(f"  🌐 Looking for About page...")
+        about = scrape_about_page(website_url)
+        result["about_page"] = about
 
-    if about:
-        parts.append(f"\n--- About Page ---\n{about.get('content', '')}")
+        # Combine into a single text block for AI
+        parts = [
+            f"=== COMPANY WEBSITE: {company_name} ===",
+            f"URL: {website_url}",
+            f"Title: {homepage.get('title', '')}",
+            f"Description: {homepage.get('description', '')}",
+            f"\n--- Homepage Content ---\n{homepage.get('content', '')}",
+        ]
 
-    result["raw_data"] = "\n".join(parts)
+        if about:
+            parts.append(f"\n--- About Page ---\n{about.get('content', '')}")
+
+        result["raw_data"] = "\n".join(parts)
+
+    except Exception as e:
+        print(f"  ⚠️  Web research failed (non-blocking): {e}")
+        result["raw_data"] = f"Web research unavailable. Analysis will rely on financial statement data and AI knowledge."
 
     return result
 
@@ -193,23 +191,22 @@ def scrape_company_info(company_name: str) -> dict:
 def search_competitors(company_name: str, industry_hint: str = "") -> list[dict]:
     """
     Search for competitors and scrape their basic info.
-
-    Returns list of competitor dicts with scraped data.
+    Designed to fail gracefully — competitor data is supplementary.
     """
-    query = f"{company_name} competitors {industry_hint}".strip()
-    print(f"  🔍 Searching for competitors: {query}")
-
     competitors = []
-    search_url = "https://www.google.com/search"
-    params = {"q": query, "num": 10}
 
     try:
-        resp = requests.get(search_url, params=params, headers=HEADERS, timeout=TIMEOUT)
+        query = f"{company_name} competitors {industry_hint}".strip()
+        print(f"  🔍 Searching for competitors: {query}")
+
+        search_url = "https://www.google.com/search"
+        params = {"q": query, "num": 10}
+
+        resp = requests.get(search_url, params=params, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
         found_urls = set()
-        company_domain = ""
 
         for a_tag in soup.find_all("a", href=True):
             href = a_tag["href"]
@@ -233,6 +230,6 @@ def search_competitors(company_name: str, industry_hint: str = "") -> list[dict]
                     competitors.append(page_data)
 
     except Exception as e:
-        print(f"  ⚠️  Competitor search failed: {e}")
+        print(f"  ⚠️  Competitor search failed (non-blocking): {e}")
 
     return competitors
