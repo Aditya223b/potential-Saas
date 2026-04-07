@@ -1,0 +1,38 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+
+# Runtime data (generated at runtime)
+uploads/
+reports/
+
+# Git
+.git/
+.gitignore
+
+# Test files
+test_*.py
+*.test.py
+
+# Documentation
+*.md
+!README.md

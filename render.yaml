@@ -1,17 +1,25 @@
 services:
   - type: web
     name: financial-analyzer
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --keep-alive 5
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore  # Closest to India for low latency
+    plan: starter      # $7/mo — required for >30s request timeout
+    healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.0"
       - key: GEMINI_API_KEY
-        sync: false
+        sync: false    # Set manually in Render dashboard
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
+      - key: SMTP_EMAIL
+        sync: false
+      - key: SMTP_APP_PASSWORD
+        sync: false
+      - key: RATE_LIMIT_PER_HOUR
+        value: "5"
+      - key: RATE_LIMIT_PER_DAY
+        value: "20"

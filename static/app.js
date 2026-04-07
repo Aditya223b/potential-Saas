@@ -401,7 +401,7 @@ function showProgressSection() {
     `).join('');
 }
 
-function listenToProgress(jobId) {
+function listenToProgress(jobId, _retryCount = 0) {
     // Pass JWT via query param for SSE (since EventSource doesn't support headers easily without polyfills)
     // Actually Flask app currently doesn't check auth for progress streaming so it's fine.
     const es = new EventSource(`/api/progress/${jobId}`);
@@ -434,8 +434,15 @@ function listenToProgress(jobId) {
 
     es.onerror = () => {
         es.close();
-        // Browser tab might have slept, or connection dropped.
-        // Try listening again in 2 seconds if the backend still says pending/running
+        const nextRetry = _retryCount + 1;
+        
+        // After 3 SSE failures, fall back to polling (more resilient on cloud hosts like Render)
+        if (nextRetry >= 3) {
+            console.warn('SSE failed 3 times, falling back to polling...');
+            pollProgress(jobId);
+            return;
+        }
+        
         setTimeout(async () => {
             try {
                 const res = await authFetch(`/api/result/${jobId}`);
@@ -445,15 +452,43 @@ function listenToProgress(jobId) {
                 } else if (data.status === 'waiting_for_user') {
                     showValidationSplitView(jobId);
                 } else {
-                    // still ongoing, reconnect SSE
-                    listenToProgress(jobId);
+                    listenToProgress(jobId, nextRetry);
                 }
             } catch(e) {
-                // Keep trying
-                listenToProgress(jobId);
+                listenToProgress(jobId, nextRetry);
             }
         }, 2000);
     };
+}
+
+// Polling fallback for environments where SSE doesn't work (e.g. Render free tier)
+function pollProgress(jobId) {
+    const interval = setInterval(async () => {
+        try {
+            const res = await authFetch(`/api/result/${jobId}`);
+            const data = await res.json();
+            
+            // Update progress steps from the job data
+            if (data.progress) {
+                data.progress.forEach(p => {
+                    if (p.step && p.step !== 'error') updateStep(p.step, p.message, p.done);
+                });
+            }
+            
+            if (data.status === 'waiting_for_user') {
+                clearInterval(interval);
+                showValidationSplitView(jobId);
+            } else if (data.status === 'completed') {
+                clearInterval(interval);
+                loadResults(jobId);
+            } else if (data.status === 'failed') {
+                clearInterval(interval);
+                showToast(data.error || 'Analysis failed.', 'error');
+            }
+        } catch(e) {
+            console.warn('Poll failed, retrying...', e);
+        }
+    }, 3000); // Poll every 3 seconds
 }
 
 function updateStep(step, message, done) {

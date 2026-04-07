@@ -11,6 +11,7 @@ import os
 import json
 import uuid
 import time
+import logging
 import threading
 from datetime import datetime
 from functools import wraps
@@ -18,6 +19,14 @@ from flask import (
     Flask, render_template, request, jsonify, Response,
     send_file, stream_with_context, g
 )
+
+# ── Production Logging ───────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB max
@@ -144,61 +153,71 @@ def run_extraction_pipeline(job: AnalysisJob, pdf_paths: list[str]):
     """Run the first half of the analysis including extraction, and then wait for user."""
     try:
         job.status = "running"
+        logger.info(f"[{job.job_id}] Starting extraction pipeline with {len(pdf_paths)} PDFs")
 
         # Step 1: Parse PDFs
         job.add_progress("parse", "📄 Uploading financial statements to Gemini...")
+        logger.info(f"[{job.job_id}] Step 1: Uploading PDFs to Gemini File API...")
         from pdf_parser import parse_multiple_pdfs
         parsed = parse_multiple_pdfs(pdf_paths)
         company_name = parsed["company_name"]
         job.company_name = company_name
         job.parsed_text = parsed.get("full_text", "")
         job.gemini_files = parsed.get("gemini_files", [])
+        logger.info(f"[{job.job_id}] Step 1 DONE: {company_name} | {len(job.gemini_files)} files uploaded")
         job.add_progress("parse", f"✅ Detected: {company_name} | {len(job.gemini_files)} documents uploaded", done=True)
 
         # Step 2: Web Research
         job.add_progress("web", f"🌐 Researching {company_name} online...")
+        logger.info(f"[{job.job_id}] Step 2: Web research for {company_name}...")
         from web_scraper import scrape_company_info, search_competitors
         company_web = scrape_company_info(company_name)
         competitor_web = search_competitors(company_name)
         web_msg = f"✅ Website: {company_web.get('website_url', 'Not found')} | {len(competitor_web)} competitors found"
+        logger.info(f"[{job.job_id}] Step 2 DONE: {web_msg}")
         job.add_progress("web", web_msg, done=True)
 
         # Step 3: Extract financial figures (multi-year)
         job.add_progress("extract", "🤖 Extracting financial figures utilizing Native File API...")
+        logger.info(f"[{job.job_id}] Step 3: AI extraction with {len(job.gemini_files)} file refs...")
         from analyzer import extract_financial_figures, _get_multi_year_financials
         raw_financials = extract_financial_figures(job.gemini_files)
         financials = _get_multi_year_financials(raw_financials)
         job.extracted_financials = financials
         years = financials.get("years_found", [])
+        logger.info(f"[{job.job_id}] Step 3 DONE: {len(years)} years extracted: {years}")
         job.add_progress("extract", f"✅ Extracted financials for {len(years)} year(s): {', '.join(years)}", done=True)
 
         # Step 4: Company background
         job.add_progress("background", "🤖 Analyzing company background...")
+        logger.info(f"[{job.job_id}] Step 4: Company background analysis...")
         from analyzer import analyze_company_background
         background = analyze_company_background(company_name, job.gemini_files, company_web.get("raw_data", ""))
         job.background = background
+        logger.info(f"[{job.job_id}] Step 4 DONE: Background complete")
         job.add_progress("background", "✅ Company background complete", done=True)
 
         # Step 5: Competitor analysis
         job.add_progress("competitors", "🤖 Analyzing competitors...")
+        logger.info(f"[{job.job_id}] Step 5: Competitor analysis...")
         from analyzer import analyze_competitors
         industry = background.get("industry", "Unknown")
         competitors = analyze_competitors(company_name, industry, competitor_web)
         job.competitors = competitors
+        logger.info(f"[{job.job_id}] Step 5 DONE: Competitor analysis complete")
         job.add_progress("competitors", "✅ Competitor analysis complete", done=True)
 
         # HALT AT VALIDATION
         job.add_progress("validate", "⏳ Waiting for human validation of financial data...")
         job.status = "waiting_for_user"
+        logger.info(f"[{job.job_id}] Pipeline paused — waiting for user validation")
 
     except Exception as e:
+        logger.error(f"[{job.job_id}] EXTRACTION PIPELINE FAILED: {e}", exc_info=True)
         job.error = str(e)
         job.status = "failed"
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
-        import traceback
-        traceback.print_exc()
     finally:
-        # Clean up local uploaded files to save disk on Render
         _cleanup_local_uploads(pdf_paths)
 
 def run_downstream_pipeline(job: AnalysisJob):
