@@ -2,7 +2,7 @@ import os
 import sys
 import logging
 from redis import Redis
-from rq import Worker, Queue, Connection
+from rq import Worker, Queue
 import sentry_sdk
 from config import REDIS_URL, SENTRY_DSN
 
@@ -15,8 +15,7 @@ if SENTRY_DSN:
 redis_conn = Redis.from_url(REDIS_URL)
 
 if __name__ == '__main__':
-    with Connection(redis_conn):
-        qs = sys.argv[1:] or ['default', 'financial_analyzer']
-        w = Worker(qs)
-        logging.info(f"Starting RQ Worker reading queues: {', '.join(qs)}")
-        w.work()
+    qs = sys.argv[1:] or ['default', 'financial_analyzer']
+    w = Worker(qs, connection=redis_conn)
+    logging.info(f"Starting RQ Worker reading queues: {', '.join(qs)}")
+    w.work()
