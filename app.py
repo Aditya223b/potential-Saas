@@ -20,6 +20,19 @@ from flask import (
     send_file, stream_with_context, g
 )
 
+import redis
+from rq import Queue
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+from config import REDIS_URL, SENTRY_DSN
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[FlaskIntegration()],
+        traces_sample_rate=1.0
+    )
+
 # ── Production Logging ───────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -36,8 +49,22 @@ app.config["REPORTS_FOLDER"] = os.path.join(os.path.dirname(__file__), "reports"
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 os.makedirs(app.config["REPORTS_FOLDER"], exist_ok=True)
 
-# In-memory store for analysis jobs
-_jobs: dict = {}
+redis_conn = redis.from_url(REDIS_URL, decode_responses=True)
+q = Queue("financial_analyzer", connection=redis.from_url(REDIS_URL))
+
+def get_job_object(job_id: str):
+    """Retrieve job state from Redis, fallback to Supabase."""
+    data = redis_conn.get(f"job_state:{job_id}")
+    if data:
+        return AnalysisJob.from_dict(json.loads(data))
+    
+    from supabase_client import get_job
+    db_data = get_job(job_id)
+    if db_data:
+        redis_conn.setex(f"job_state:{job_id}", 86400, json.dumps(db_data))
+        return AnalysisJob.from_dict(db_data)
+        
+    return None
 
 from rate_limiter import rate_limiter
 
@@ -68,8 +95,32 @@ class AnalysisJob:
         # Persist job row to Supabase on creation
         self._persist_async({"status": "pending", "filenames": filenames})
 
+    @classmethod
+    def from_dict(cls, data: dict):
+        if not data: return None
+        job = cls(data.get("job_id"), data.get("filenames", []), data.get("user_id"))
+        job.status = data.get("status", "pending")
+        job.progress = data.get("progress", [])
+        job.result = data.get("result")
+        job.extracted_financials = data.get("extracted_financials")
+        job.company_name = data.get("company_name")
+        job.parsed_text = data.get("parsed_text")
+        job.background = data.get("background")
+        job.competitors = data.get("competitors")
+        job.gemini_files = data.get("gemini_files", [])
+        job.report_path = data.get("report_path")
+        job.error = data.get("error")
+        job.created_at = data.get("created_at")
+        return job
+
     def _persist_async(self, fields: dict):
-        """Fire-and-forget: write fields to Supabase jobs table."""
+        """Write fields to Redis cache, then fire-and-forget to Supabase jobs table."""
+        try:
+            state_dict = self.to_dict()
+            redis_conn.setex(f"job_state:{self.job_id}", 86400, json.dumps(state_dict))
+        except Exception as e:
+            logger.error(f"[{self.job_id}] Redis persist failed: {e}")
+
         def _write():
             try:
                 from supabase_client import update_job
@@ -181,7 +232,7 @@ def _cleanup_local_uploads(pdf_paths: list[str]):
 def run_extraction_pipeline(job: AnalysisJob, pdf_paths: list[str]):
     """Run the first half of the analysis including extraction, and then wait for user."""
     try:
-        job.status = "running"
+        job.set_status("running")
         logger.info(f"[{job.job_id}] Starting extraction pipeline with {len(pdf_paths)} PDFs")
 
         # Step 1: Parse PDFs
@@ -238,13 +289,13 @@ def run_extraction_pipeline(job: AnalysisJob, pdf_paths: list[str]):
 
         # HALT AT VALIDATION
         job.add_progress("validate", "⏳ Waiting for human validation of financial data...")
-        job.status = "waiting_for_user"
+        job.set_status("waiting_for_user")
         logger.info(f"[{job.job_id}] Pipeline paused — waiting for user validation")
 
     except Exception as e:
         logger.error(f"[{job.job_id}] EXTRACTION PIPELINE FAILED: {e}", exc_info=True)
         job.error = str(e)
-        job.status = "failed"
+        job.set_status("failed")
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
     finally:
         _cleanup_local_uploads(pdf_paths)
@@ -305,12 +356,13 @@ def run_downstream_pipeline(job: AnalysisJob):
             "recommendation": recommendation,
         }
 
-        report_path = generate_report(analysis, output_dir=app.config["REPORTS_FOLDER"])
+        from reports import generate_docx_report
+        report_path = generate_docx_report(job.company_name, analysis, job.job_id)
         job.add_progress("report", f"✅ Report saved", done=True)
 
         job.result = analysis
         job.report_path = report_path
-        job.status = "completed"
+        job.set_status("completed")
 
         # Step 11: Save to Supabase (if user is authenticated)
         if job.user_id:
@@ -409,7 +461,6 @@ def upload():
         return jsonify({"error": "No valid PDF files found"}), 400
 
     job = AnalysisJob(job_id, filenames, user_id=user_id)
-    _jobs[job_id] = job
 
     # Step 1: Persist job to Supabase immediately
     from supabase_client import create_job
@@ -417,15 +468,13 @@ def upload():
 
     rate_limiter.record(user_id)
 
-    thread = threading.Thread(target=run_extraction_pipeline, args=(job, pdf_paths))
-    thread.daemon = True
-    thread.start()
+    q.enqueue("app.run_extraction_pipeline", job, pdf_paths, job_timeout=3600)
 
     return jsonify({"job_id": job_id})
 
 @app.route("/api/approve_financials/<job_id>", methods=["POST"])
 def approve_financials(job_id):
-    job = _jobs.get(job_id)
+    job = get_job_object(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
 
@@ -434,22 +483,20 @@ def approve_financials(job_id):
         return jsonify({"error": "No financials payload provided"}), 400
 
     job.extracted_financials = verified_financials
-    job.status = "resuming"
     job.add_progress("validate", "✅ Human validation complete", done=True)
+    job.set_status("resuming")
 
-    thread = threading.Thread(target=run_downstream_pipeline, args=(job,))
-    thread.daemon = True
-    thread.start()
+    q.enqueue("app.run_downstream_pipeline", job, job_timeout=3600)
     
     return jsonify({"status": "resuming"})
 
 @app.route("/api/flag_for_review/<job_id>", methods=["POST"])
 def flag_for_review(job_id):
-    job = _jobs.get(job_id)
+    job = get_job_object(job_id)
     if not job: return jsonify({"error": "Job not found"}), 404
-    job.status = "failed"
     job.error = "Flagged for manual review by human analyst."
     job.add_progress("validate", "🛑 Flagged for manual review", done=True)
+    job.set_status("failed")
     return jsonify({"status": "failed"})
 
 
@@ -457,17 +504,6 @@ def flag_for_review(job_id):
 def progress(job_id):
     """SSE endpoint for real-time progress updates."""
     def generate():
-        job = _jobs.get(job_id)
-        
-        # Fallback: if job not in memory, it might be in Supabase (container restart)
-        db_job_data = None
-        if not job:
-            from supabase_client import get_job
-            db_job_data = get_job(job_id)
-            if not db_job_data:
-                yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
-                return
-
         seen = 0
         heartbeat_interval = 15
         last_heartbeat = time.time()
@@ -479,15 +515,13 @@ def progress(job_id):
                 yield f"data: {json.dumps({'step': 'timeout', 'message': 'SSE session timed out', 'done': True})}\n\n"
                 return
 
-            # Get current state (either from memory object or fresh from DB)
-            if job:
-                current_progress = job.progress
-                current_status = job.status
-            else:
-                from supabase_client import get_job
-                db_job_data = get_job(job_id)
-                current_progress = db_job_data.get("progress", [])
-                current_status = db_job_data.get("status", "pending")
+            job = get_job_object(job_id)
+            if not job:
+                yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+                return
+
+            current_progress = job.progress
+            current_status = job.status
 
             if len(current_progress) > seen:
                 for event in current_progress[seen:]:
@@ -507,7 +541,7 @@ def progress(job_id):
                 yield f": heartbeat\n\n"
                 last_heartbeat = time.time()
 
-            time.sleep(1.0 if not job else 0.5) # Poll slower if using DB fallback
+            time.sleep(0.5) 
 
     return Response(
         stream_with_context(generate()),
@@ -519,15 +553,9 @@ def progress(job_id):
 @app.route("/api/result/<job_id>")
 def result(job_id):
     """Get the full analysis result."""
-    job = _jobs.get(job_id)
+    job = get_job_object(job_id)
     if job:
         return jsonify(job.to_dict())
-    
-    # Fallback to Supabase
-    from supabase_client import get_job
-    db_job = get_job(job_id)
-    if db_job:
-        return jsonify(db_job)
         
     return jsonify({"error": "Job not found"}), 404
 
@@ -535,7 +563,7 @@ def result(job_id):
 @app.route("/api/download/<job_id>")
 def download(job_id):
     """Download the generated DOCX report."""
-    job = _jobs.get(job_id)
+    job = get_job_object(job_id)
     if not job or not job.report_path:
         return jsonify({"error": "Report not available"}), 404
     return send_file(job.report_path, as_attachment=True, download_name=os.path.basename(job.report_path))
@@ -544,7 +572,7 @@ def download(job_id):
 @app.route("/api/email/<job_id>", methods=["POST"])
 def send_email(job_id):
     """Send the report via email."""
-    job = _jobs.get(job_id)
+    job = get_job_object(job_id)
     if not job or not job.result:
         return jsonify({"error": "Analysis not complete"}), 400
 
@@ -574,7 +602,7 @@ def send_email(job_id):
 @require_auth
 def manual_save_analysis(job_id):
     """Manually persist the analysis into Supabase history."""
-    job = _jobs.get(job_id)
+    job = get_job_object(job_id)
     if not job or not job.result:
         return jsonify({"error": "Analysis result not found or not complete."}), 404
 

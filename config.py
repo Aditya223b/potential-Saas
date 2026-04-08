@@ -19,7 +19,8 @@ def _require(key: str) -> str:
 
 def _get(key: str, default: str = "") -> str:
     """Return env var or default (no crash)."""
-    return os.getenv(key, default).strip()
+    val = os.getenv(key, "").strip()
+    return val if val else default
 
 
 # ── Google Gemini AI ──────────────────────────────────────────────────────────
@@ -29,6 +30,10 @@ GEMINI_API_KEY: str = _require("GEMINI_API_KEY")
 SUPABASE_URL: str = _require("SUPABASE_URL")
 SUPABASE_KEY: str = _require("SUPABASE_KEY")
 SUPABASE_SERVICE_KEY: str = _require("SUPABASE_SERVICE_KEY")
+
+# ── Redis & Error Tracking ───────────────────────────────────────────────────
+REDIS_URL: str = _get("REDIS_URL", "redis://localhost:6379")
+SENTRY_DSN: str = _get("SENTRY_DSN", "")
 
 # ── Rate Limiting ─────────────────────────────────────────────────────────────
 # Max AI analyses per authenticated user. Adjust in .env to suit your budget.

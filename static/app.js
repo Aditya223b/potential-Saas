@@ -1085,7 +1085,14 @@ async function approveAndContinue() {
             document.getElementById('validationRightPane').style.display = 'none';
             listenToProgress(_currentValidationJobId); // resume streaming
         } else {
-            showToast("Failed to submit approval.", "error");
+            let errorText = "Failed to submit approval.";
+            try {
+                const data = await res.json();
+                if (data.error) errorText = data.error;
+            } catch (e) {
+                errorText = await res.text() || errorText;
+            }
+            showToast(`Error: ${errorText}`, "error");
         }
     } catch(err) {
         showToast("Network error.", "error");
