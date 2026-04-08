@@ -229,11 +229,21 @@ def _cleanup_local_uploads(pdf_paths: list[str]):
             pass
 
 
-def run_extraction_pipeline(job: AnalysisJob, pdf_paths: list[str]):
+def run_extraction_pipeline(job: AnalysisJob, pdf_bytes_list: list[bytes], filenames: list[str]):
     """Run the first half of the analysis including extraction, and then wait for user."""
+    pdf_paths = []
     try:
         job.set_status("running")
-        logger.info(f"[{job.job_id}] Starting extraction pipeline with {len(pdf_paths)} PDFs")
+        logger.info(f"[{job.job_id}] Starting extraction pipeline with {len(filenames)} PDFs (received via RAM)")
+
+        # Save the bytes to the Worker's local ephemeral filesystem
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+        for filename, pdf_bytes in zip(filenames, pdf_bytes_list):
+            safe_name = f"{job.job_id}_{filename}"
+            path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
+            with open(path, "wb") as f:
+                f.write(pdf_bytes)
+            pdf_paths.append(path)
 
         # Step 1: Parse PDFs
         job.add_progress("parse", "📄 Uploading financial statements to Gemini...")
@@ -446,18 +456,15 @@ def upload():
         return jsonify({"error": reason}), 429
 
     job_id = str(uuid.uuid4())[:8]
-    pdf_paths = []
+    pdf_bytes_list = []
     filenames = []
 
     for f in files:
         if f.filename and f.filename.lower().endswith(".pdf"):
-            safe_name = f"{job_id}_{f.filename}"
-            path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
-            f.save(path)
-            pdf_paths.append(path)
+            pdf_bytes_list.append(f.read())
             filenames.append(f.filename)
 
-    if not pdf_paths:
+    if not pdf_bytes_list:
         return jsonify({"error": "No valid PDF files found"}), 400
 
     job = AnalysisJob(job_id, filenames, user_id=user_id)
@@ -468,7 +475,7 @@ def upload():
 
     rate_limiter.record(user_id)
 
-    q.enqueue("app.run_extraction_pipeline", job, pdf_paths, job_timeout=3600)
+    q.enqueue("app.run_extraction_pipeline", job, pdf_bytes_list, filenames, job_timeout=3600)
 
     return jsonify({"job_id": job_id})
 
