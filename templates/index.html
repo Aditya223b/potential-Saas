@@ -235,9 +235,12 @@
                 <div class="progress-split-layout" id="progressSplitLayout">
                     <!-- Left Side: Workflow Progress -->
                     <div class="progress-left-pane">
-                        <div class="progress-header">
-                            <h2>🤖 Analysis in Progress</h2>
-                            <p>Gemini 2.5 Pro is analyzing your financial statements...</p>
+                        <div class="progress-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <h2>🤖 Analysis in Progress</h2>
+                                <p>Gemini 3.1 Pro is analyzing your financial statements...</p>
+                            </div>
+                            <button id="restartJobBtn" class="btn btn-sm btn-ghost" style="color: var(--warning); border-color: var(--warning); display: none;" onclick="restartWorkflow()">🔄 Force Restart</button>
                         </div>
                         <div class="progress-steps" id="progressSteps"></div>
                     </div>

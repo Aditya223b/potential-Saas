@@ -92,8 +92,8 @@ class AnalysisJob:
         self.report_path = None   # path to generated DOCX
         self.error = None
         self.created_at = datetime.now().isoformat()
-        # Persist job row to Supabase on creation
-        self._persist_async({"status": "pending", "filenames": filenames})
+        # Initial persistence should be triggered explicitly by the caller
+        # to avoid race conditions during deserialization.
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -474,10 +474,8 @@ def upload():
         return jsonify({"error": "No valid PDF files found"}), 400
 
     job = AnalysisJob(job_id, filenames, user_id=user_id)
-
-    # Step 1: Persist job to Supabase immediately
-    from supabase_client import create_job
-    create_job(job_id, user_id, filenames)
+    # Step 1: Initialize job state in Redis/Supabase
+    job.set_status("pending")
 
     rate_limiter.record(user_id)
 
@@ -491,7 +489,8 @@ def approve_financials(job_id):
     if not job:
         return jsonify({"error": "Job not found"}), 404
 
-    verified_financials = request.json.get("financials")
+    data = request.get_json()
+    verified_financials = data.get("financials")
     if not verified_financials:
         return jsonify({"error": "No financials payload provided"}), 400
 
@@ -502,6 +501,25 @@ def approve_financials(job_id):
     q.enqueue("app.run_downstream_pipeline", job, job_timeout=3600)
     
     return jsonify({"status": "resuming"})
+
+@app.route("/api/restart_job/<job_id>", methods=["POST"])
+def restart_job(job_id):
+    """Force restart a job if it gets stuck."""
+    job = get_job_object(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    if job.status == "completed":
+        return jsonify({"message": "Job already completed"}), 200
+
+    if job.extracted_financials:
+        job.set_status("resuming")
+        job.error = None
+        job.add_progress("validate", "🔄 Workflow forcefully restarted by user", done=True)
+        q.enqueue("app.run_downstream_pipeline", job, job_timeout=3600)
+        return jsonify({"status": "restarted"})
+
+    return jsonify({"error": "Cannot restart the extraction phase (PDFs not preserved in RAM). Please refresh and re-upload the PDF to start fresh."}), 400
 
 @app.route("/api/flag_for_review/<job_id>", methods=["POST"])
 def flag_for_review(job_id):

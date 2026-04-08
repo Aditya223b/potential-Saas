@@ -387,6 +387,10 @@ const STEP_CONFIG = {
 
 function showProgressSection() {
     progressSection.style.display = 'block';
+    
+    const restartBtn = document.getElementById('restartJobBtn');
+    if (restartBtn) restartBtn.style.display = 'block';
+
     const stepsEl = document.getElementById('progressSteps');
     stepsEl.innerHTML = Object.entries(STEP_CONFIG).map(([key, cfg]) => `
         <div class="progress-step" id="step-${key}">
@@ -744,6 +748,68 @@ async function downloadReport(id, isHistorical) {
     }
 }
 window.downloadReport = downloadReport;
+
+async function emailReport() {
+    const email = document.getElementById('modalEmailInput').value.trim();
+    if (!email) {
+        showToast('Please enter an email.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('sendEmailBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    // Currently backend expects local job_id for sending emails, 
+    // not supabase analysis_id. We'll try the endpoint directly.
+    try {
+        const res = await authFetch(`/api/email/${window.currentReportJobId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            showToast(`Report sent to ${email}!`, 'success');
+            closeEmailModal();
+        } else {
+            showToast(data.error || 'Failed to send email.', 'error');
+        }
+    } catch (err) {
+        showToast('Network error.', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Send Report';
+}
+window.sendEmail = emailReport; // Note: using emailReport to not clash with global func if any
+
+async function restartWorkflow() {
+    const jobId = _currentJobId || _currentValidationJobId;
+    if (!jobId) {
+        showToast("No active job to restart.", "error");
+        return;
+    }
+    
+    if (!confirm("Force restart this workflow pipeline? This will push it back to the active queue and overwrite current downstream progress.")) return;
+
+    try {
+        const res = await authFetch(`/api/restart_job/${jobId}`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (res.ok) {
+            showToast("Workflow re-injected into the queue!", "success");
+            const vPane = document.getElementById('validationRightPane');
+            if (vPane) vPane.style.display = 'none';
+        } else {
+            showToast(data.error || "Failed to restart.", "error");
+        }
+    } catch (err) {
+        showToast("Network error trying to restart.", "error");
+    }
+}
+window.restartWorkflow = restartWorkflow;
 
 async function saveReport(jobId) {
     const btn = document.getElementById('saveReportBtn');
