@@ -372,8 +372,7 @@ def run_downstream_pipeline(job: AnalysisJob):
             "recommendation": recommendation,
         }
 
-        from reports import generate_docx_report
-        report_path = generate_docx_report(job.company_name, analysis, job.job_id)
+        report_path = generate_report(job.company_name, analysis, job.job_id)
         job.add_progress("report", f"✅ Report saved", done=True)
 
         job.result = analysis
