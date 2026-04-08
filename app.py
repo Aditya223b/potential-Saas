@@ -413,7 +413,7 @@ def run_downstream_pipeline(job: AnalysisJob):
 
     except Exception as e:
         job.error = str(e)
-        job.status = "failed"
+        job.set_status("failed")
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
         import traceback
         traceback.print_exc()
