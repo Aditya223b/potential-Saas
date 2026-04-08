@@ -113,10 +113,13 @@ class AnalysisJob:
         job.created_at = data.get("created_at")
         return job
 
-    def _persist_async(self, fields: dict):
-        """Write fields to Redis cache, then fire-and-forget to Supabase jobs table."""
+    def _persist_async(self, extra_fields: dict = None):
+        """Write full state to Redis, then fire-and-forget to Supabase."""
+        state_dict = self.to_dict()
+        if extra_fields:
+            state_dict.update(extra_fields)
+            
         try:
-            state_dict = self.to_dict()
             redis_conn.setex(f"job_state:{self.job_id}", 86400, json.dumps(state_dict))
         except Exception as e:
             logger.error(f"[{self.job_id}] Redis persist failed: {e}")
@@ -124,7 +127,8 @@ class AnalysisJob:
         def _write():
             try:
                 from supabase_client import update_job
-                update_job(self.job_id, **fields)
+                # Use the full state_dict for DB backup as well
+                update_job(self.job_id, **state_dict)
             except Exception as e:
                 logger.warning(f"[{self.job_id}] Supabase persist failed: {e}")
         threading.Thread(target=_write, daemon=True).start()
@@ -137,25 +141,27 @@ class AnalysisJob:
             "timestamp": datetime.now().isoformat(),
         }
         self.progress.append(entry)
-        # Persist progress + current status to Supabase
-        self._persist_async({
-            "status": self.status,
-            "progress": self.progress,
-            "error": self.error,
-        })
+        # Persist everything including newest progress entries
+        self._persist_async()
 
     def set_status(self, status: str):
         """Update status and persist immediately."""
         self.status = status
-        self._persist_async({"status": status})
+        self._persist_async()
 
     def to_dict(self):
         return {
             "job_id": self.job_id,
+            "user_id": self.user_id,
             "status": self.status,
             "progress": self.progress,
             "result": self.result,
             "extracted_financials": self.extracted_financials,
+            "company_name": self.company_name,
+            "parsed_text": self.parsed_text,
+            "background": self.background,
+            "competitors": self.competitors,
+            "gemini_files": self.gemini_files,
             "report_path": self.report_path,
             "error": self.error,
             "filenames": self.filenames,
