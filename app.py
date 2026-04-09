@@ -127,8 +127,11 @@ class AnalysisJob:
         def _write():
             try:
                 from supabase_client import update_job
-                # Use the full state_dict for DB backup as well
-                update_job(self.job_id, **state_dict)
+                # `job_id` is used to locate the row and should not be sent as
+                # an update field as well.
+                db_fields = dict(state_dict)
+                db_fields.pop("job_id", None)
+                update_job(self.job_id, **db_fields)
             except Exception as e:
                 logger.warning(f"[{self.job_id}] Supabase persist failed: {e}")
         threading.Thread(target=_write, daemon=True).start()
@@ -372,14 +375,14 @@ def run_downstream_pipeline(job: AnalysisJob):
             "recommendation": recommendation,
         }
 
-        output_dir = os.path.join(app.config.get("UPLOAD_FOLDER", "/tmp"), "reports")
+        output_dir = app.config["REPORTS_FOLDER"]
         os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"[{job.job_id}] Step 10: Writing report to {output_dir}")
         report_path = generate_report(analysis, output_dir=output_dir)
         job.add_progress("report", f"✅ Report saved", done=True)
 
         job.result = analysis
         job.report_path = report_path
-        job.set_status("completed")
 
         # Step 11: Save to Supabase (if user is authenticated)
         if job.user_id:
@@ -412,13 +415,16 @@ def run_downstream_pipeline(job: AnalysisJob):
                 job.add_progress("save", "⚠️ Profile save timed out (report still generated)", done=True)
             else:
                 job.add_progress("save", "✅ Saved to your profile", done=True)
+        else:
+            job.add_progress("save", "ℹ️ Save skipped (anonymous analysis)", done=True)
+
+        job.set_status("completed")
 
     except Exception as e:
+        logger.error(f"[{job.job_id}] DOWNSTREAM PIPELINE FAILED: {e}", exc_info=True)
         job.error = str(e)
         job.set_status("failed")
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
-        import traceback
-        traceback.print_exc()
     finally:
         # Clean up Gemini files after downstream completes or fails
         _cleanup_gemini_files(getattr(job, "gemini_files", []))

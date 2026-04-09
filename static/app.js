@@ -626,12 +626,29 @@ function renderResultsView(result, jobId, isHistorical = false) {
 
 function renderRatioTables(ratios) {
     if (!ratios || Object.keys(ratios).length === 0) return '<p class="summary-text">No ratios calculated.</p>';
-    let html = '';
-    for (const [category, items] of Object.entries(ratios)) {
-        html += `<h4 style="margin:16px 0 8px;font-size:14px;color:var(--accent)">${category}</h4>`;
+    const looksLikeRatioLeaf = (value) => {
+        return value && typeof value === 'object' && (
+            Object.prototype.hasOwnProperty.call(value, 'formatted') ||
+            Object.prototype.hasOwnProperty.call(value, 'benchmark') ||
+            Object.prototype.hasOwnProperty.call(value, 'status')
+        );
+    };
+
+    const renderCategoryTable = (category, items) => {
+        if (!items || typeof items !== 'object') return '';
+
+        let html = `<h4 style="margin:16px 0 8px;font-size:14px;color:var(--accent)">${category}</h4>`;
         html += '<div class="excel-table-container"><table class="excel-table"><thead><tr><th>Ratio</th><th>Value</th><th>Benchmark</th><th>Status</th></tr></thead><tbody>';
+
         for (const [name, data] of Object.entries(items)) {
-            const statusClass = data.status?.includes('PASS') ? 'status-pass' : data.status?.includes('FAIL') ? 'status-fail' : 'status-caution';
+            if (!looksLikeRatioLeaf(data)) continue;
+
+            const statusClass = data.status?.includes('PASS')
+                ? 'status-pass'
+                : data.status?.includes('FAIL')
+                    ? 'status-fail'
+                    : 'status-caution';
+
             html += `<tr>
                 <td>${name}</td>
                 <td style="font-weight:600">${data.formatted || '—'}</td>
@@ -639,8 +656,30 @@ function renderRatioTables(ratios) {
                 <td class="${statusClass}">${data.status || '—'}</td>
             </tr>`;
         }
+
         html += '</tbody></table></div>';
+        return html;
+    };
+
+    const firstValue = Object.values(ratios)[0];
+    const isMultiYearRatios = firstValue && typeof firstValue === 'object' && !looksLikeRatioLeaf(firstValue);
+
+    let html = '';
+
+    if (isMultiYearRatios) {
+        for (const [year, categories] of Object.entries(ratios)) {
+            html += `<h3 style="margin:20px 0 10px;font-size:18px;color:var(--accent)">${year}</h3>`;
+            for (const [category, items] of Object.entries(categories || {})) {
+                html += renderCategoryTable(category, items);
+            }
+        }
+        return html;
     }
+
+    for (const [category, items] of Object.entries(ratios)) {
+        html += renderCategoryTable(category, items);
+    }
+
     return html;
 }
 
