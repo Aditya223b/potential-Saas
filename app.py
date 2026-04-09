@@ -238,7 +238,13 @@ def _cleanup_local_uploads(pdf_paths: list[str]):
             pass
 
 
-def run_extraction_pipeline(job: AnalysisJob, pdf_bytes_list: list[bytes], filenames: list[str]):
+def run_extraction_pipeline(
+    job: AnalysisJob,
+    pdf_bytes_list: list[bytes],
+    filenames: list[str],
+    preferred_company_name: str = "",
+    company_website: str = "",
+):
     """Run the first half of the analysis including extraction, and then wait for user."""
     pdf_paths = []
     try:
@@ -260,6 +266,8 @@ def run_extraction_pipeline(job: AnalysisJob, pdf_bytes_list: list[bytes], filen
         from pdf_parser import parse_multiple_pdfs
         parsed = parse_multiple_pdfs(pdf_paths)
         company_name = parsed["company_name"]
+        if preferred_company_name and (not company_name or company_name == "Unknown Company"):
+            company_name = preferred_company_name
         job.company_name = company_name
         job.parsed_text = parsed.get("full_text", "")
         job.gemini_files = parsed.get("gemini_files", [])
@@ -270,7 +278,7 @@ def run_extraction_pipeline(job: AnalysisJob, pdf_bytes_list: list[bytes], filen
         job.add_progress("web", f"🌐 Researching {company_name} online...")
         logger.info(f"[{job.job_id}] Step 2: Web research for {company_name}...")
         from web_scraper import scrape_company_info, search_competitors
-        company_web = scrape_company_info(company_name)
+        company_web = scrape_company_info(company_name, website_url_override=company_website)
         competitor_web = search_competitors(company_name)
         web_msg = f"✅ Website: {company_web.get('website_url', 'Not found')} | {len(competitor_web)} competitors found"
         logger.info(f"[{job.job_id}] Step 2 DONE: {web_msg}")
@@ -462,6 +470,8 @@ def upload():
     # Try to get user from auth header (optional)
     user = optional_auth()
     user_id = user["id"] if user else None
+    preferred_company_name = request.form.get("company", "").strip()
+    company_website = request.form.get("company_website", "").strip()
 
     # Enforce per-user AI rate limit
     allowed, reason = rate_limiter.check(user_id)
@@ -486,7 +496,15 @@ def upload():
 
     rate_limiter.record(user_id)
 
-    q.enqueue("app.run_extraction_pipeline", job, pdf_bytes_list, filenames, job_timeout=3600)
+    q.enqueue(
+        "app.run_extraction_pipeline",
+        job,
+        pdf_bytes_list,
+        filenames,
+        preferred_company_name,
+        company_website,
+        job_timeout=3600,
+    )
 
     return jsonify({"job_id": job_id})
 

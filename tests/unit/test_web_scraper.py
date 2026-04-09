@@ -101,6 +101,23 @@ def test_scrape_company_info_no_site_fallback(mock_search):
     assert "No website found" in result["raw_data"]
     assert result["website_url"] is None
 
+@patch("web_scraper.scrape_about_page", return_value=None)
+@patch("web_scraper.scrape_page")
+@patch("web_scraper.search_company_website")
+def test_scrape_company_info_uses_provided_website(mock_search, mock_scrape, mock_about):
+    """Uses a manually provided website instead of search discovery."""
+    mock_scrape.return_value = {
+        "title": "Target Company",
+        "description": "Official site",
+        "content": "Provided website content",
+    }
+
+    result = scrape_company_info("Target Company", website_url_override="targetcompany.com")
+
+    assert result["website_url"] == "https://targetcompany.com"
+    assert "Provided website content" in result["raw_data"]
+    assert mock_search.called is False
+
 @patch("requests.get")
 def test_scraper_403_forbidden_handling(mock_get):
     """Case 145, 146: DuckDuckGo blocks scraping with 403 Forbidden."""

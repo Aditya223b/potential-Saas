@@ -239,8 +239,10 @@ function goToStep(step) {
     // Validate Step 2 -> 3
     if (step === 3) {
         const company = document.getElementById('companyNameInput').value.trim() || 'Auto-detecting...';
+        const website = document.getElementById('companyWebsiteInput').value.trim() || 'Not provided';
         document.getElementById('reviewCompany').textContent = company;
         document.getElementById('reviewFiles').textContent = selectedFiles.map(f => f.name).join(', ');
+        document.getElementById('reviewWebsite').textContent = website;
         
         const modules = Array.from(document.querySelectorAll('.option-card input:checked')).map(el => {
             return el.nextElementSibling.querySelector('.option-label').textContent;
@@ -275,6 +277,7 @@ function newAnalysis() {
     resultsSection.style.display = 'none';
     
     document.getElementById('companyNameInput').value = '';
+    document.getElementById('companyWebsiteInput').value = '';
     document.getElementById('emailInput').value = '';
     renderFileList();
     goToStep(1);
@@ -338,6 +341,9 @@ async function startAnalysis() {
     
     const company = document.getElementById('companyNameInput').value.trim();
     if (company) formData.append('company', company);
+
+    const companyWebsite = document.getElementById('companyWebsiteInput').value.trim();
+    if (companyWebsite) formData.append('company_website', companyWebsite);
     
     const email = document.getElementById('emailInput').value.trim();
     if (email) formData.append('email', email);

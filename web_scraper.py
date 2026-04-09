@@ -22,6 +22,19 @@ HEADERS = {
 TIMEOUT = 10  # seconds — keep short for cloud deployments
 
 
+def _normalize_website_url(url: str) -> str:
+    """Normalize a user-provided company website URL for scraping."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+
+    parsed = urlparse(url)
+    if not parsed.scheme:
+        url = f"https://{url}"
+
+    return url
+
+
 def search_company_website(company_name: str) -> str | None:
     """
     Search Google for the company's official website URL.
@@ -135,7 +148,7 @@ def scrape_about_page(base_url: str) -> dict | None:
     return None
 
 
-def scrape_company_info(company_name: str) -> dict:
+def scrape_company_info(company_name: str, website_url_override: str = "") -> dict:
     """
     Full pipeline: find the company website, scrape it, and gather
     background data for AI analysis.
@@ -150,8 +163,13 @@ def scrape_company_info(company_name: str) -> dict:
     }
 
     try:
-        print(f"  🌐 Searching for {company_name} website...")
-        website_url = search_company_website(company_name)
+        website_url = _normalize_website_url(website_url_override)
+        if website_url:
+            print(f"  🌐 Using provided website for {company_name}: {website_url}")
+        else:
+            print(f"  🌐 Searching for {company_name} website...")
+            website_url = search_company_website(company_name)
+
         result["website_url"] = website_url
 
         if not website_url:
