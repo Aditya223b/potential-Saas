@@ -372,7 +372,9 @@ def run_downstream_pipeline(job: AnalysisJob):
             "recommendation": recommendation,
         }
 
-        report_path = generate_report(job.company_name, analysis, job.job_id)
+        output_dir = os.path.join(app.config.get("UPLOAD_FOLDER", "/tmp"), "reports")
+        os.makedirs(output_dir, exist_ok=True)
+        report_path = generate_report(analysis, output_dir=output_dir)
         job.add_progress("report", f"✅ Report saved", done=True)
 
         job.result = analysis
