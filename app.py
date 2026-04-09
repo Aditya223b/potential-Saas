@@ -52,6 +52,11 @@ os.makedirs(app.config["REPORTS_FOLDER"], exist_ok=True)
 redis_conn = redis.from_url(REDIS_URL, decode_responses=True)
 q = Queue("financial_analyzer", connection=redis.from_url(REDIS_URL))
 
+
+def _truncate_words(text: str, max_words: int = 300) -> str:
+    words = (text or "").split()
+    return " ".join(words[:max_words])
+
 def get_job_object(job_id: str):
     """Retrieve job state from Redis, fallback to Supabase."""
     data = redis_conn.get(f"job_state:{job_id}")
@@ -244,6 +249,7 @@ def run_extraction_pipeline(
     filenames: list[str],
     preferred_company_name: str = "",
     company_website: str = "",
+    company_context: str = "",
 ):
     """Run the first half of the analysis including extraction, and then wait for user."""
     pdf_paths = []
@@ -299,7 +305,14 @@ def run_extraction_pipeline(
         job.add_progress("background", "🤖 Analyzing company background...")
         logger.info(f"[{job.job_id}] Step 4: Company background analysis...")
         from analyzer import analyze_company_background
-        background = analyze_company_background(company_name, job.gemini_files, company_web.get("raw_data", ""))
+        supplemental_context = _truncate_words(company_context, 300)
+        company_research_context = company_web.get("raw_data", "")
+        if supplemental_context:
+            company_research_context = (
+                f"{company_research_context}\n\n=== USER PROVIDED COMPANY CONTEXT ===\n"
+                f"{supplemental_context}"
+            ).strip()
+        background = analyze_company_background(company_name, job.gemini_files, company_research_context)
         job.background = background
         logger.info(f"[{job.job_id}] Step 4 DONE: Background complete")
         job.add_progress("background", "✅ Company background complete", done=True)
@@ -472,6 +485,7 @@ def upload():
     user_id = user["id"] if user else None
     preferred_company_name = request.form.get("company", "").strip()
     company_website = request.form.get("company_website", "").strip()
+    company_context = _truncate_words(request.form.get("company_context", "").strip(), 300)
 
     # Enforce per-user AI rate limit
     allowed, reason = rate_limiter.check(user_id)
@@ -503,6 +517,7 @@ def upload():
         filenames,
         preferred_company_name,
         company_website,
+        company_context,
         job_timeout=3600,
     )
 

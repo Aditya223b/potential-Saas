@@ -232,6 +232,28 @@ async function logout() {
 }
 
 // ── Wizard Logic ────────────────────────────────────────────
+function normalizeWordLimitedText(text, maxWords = 300) {
+    const words = (text || '').trim().match(/\S+/g) || [];
+    return words.slice(0, maxWords).join(' ');
+}
+
+function countWords(text) {
+    return ((text || '').trim().match(/\S+/g) || []).length;
+}
+
+function syncCompanyContextInput() {
+    const input = document.getElementById('companyContextInput');
+    const counter = document.getElementById('companyContextWordCount');
+    if (!input || !counter) return;
+
+    const normalized = normalizeWordLimitedText(input.value, 300);
+    if (normalized !== input.value.trim()) {
+        input.value = normalized;
+    }
+
+    counter.textContent = `${countWords(input.value)} / 300 words`;
+}
+
 function goToStep(step) {
     // Validate Step 1 -> 2
     if (step === 2 && selectedFiles.length === 0) return;
@@ -240,9 +262,11 @@ function goToStep(step) {
     if (step === 3) {
         const company = document.getElementById('companyNameInput').value.trim() || 'Auto-detecting...';
         const website = document.getElementById('companyWebsiteInput').value.trim() || 'Not provided';
+        const companyContext = normalizeWordLimitedText(document.getElementById('companyContextInput').value.trim(), 300);
         document.getElementById('reviewCompany').textContent = company;
         document.getElementById('reviewFiles').textContent = selectedFiles.map(f => f.name).join(', ');
         document.getElementById('reviewWebsite').textContent = website;
+        document.getElementById('reviewContext').textContent = companyContext || 'Not provided';
         
         const modules = Array.from(document.querySelectorAll('.option-card input:checked')).map(el => {
             return el.nextElementSibling.querySelector('.option-label').textContent;
@@ -278,7 +302,9 @@ function newAnalysis() {
     
     document.getElementById('companyNameInput').value = '';
     document.getElementById('companyWebsiteInput').value = '';
+    document.getElementById('companyContextInput').value = '';
     document.getElementById('emailInput').value = '';
+    syncCompanyContextInput();
     renderFileList();
     goToStep(1);
     
@@ -289,6 +315,11 @@ window.showNewAnalysis = newAnalysis;
 // ── File Handling ───────────────────────────────────────────
 function setupFileListeners() {
     fileInput.addEventListener('change', (e) => addFiles(Array.from(e.target.files)));
+    const companyContextInput = document.getElementById('companyContextInput');
+    if (companyContextInput) {
+        companyContextInput.addEventListener('input', syncCompanyContextInput);
+        syncCompanyContextInput();
+    }
 
     dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
@@ -344,6 +375,9 @@ async function startAnalysis() {
 
     const companyWebsite = document.getElementById('companyWebsiteInput').value.trim();
     if (companyWebsite) formData.append('company_website', companyWebsite);
+
+    const companyContext = normalizeWordLimitedText(document.getElementById('companyContextInput').value.trim(), 300);
+    if (companyContext) formData.append('company_context', companyContext);
     
     const email = document.getElementById('emailInput').value.trim();
     if (email) formData.append('email', email);
