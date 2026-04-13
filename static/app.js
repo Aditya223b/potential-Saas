@@ -473,13 +473,13 @@ const STEP_CONFIG = {
 
 function showProgressSection() {
     progressSection.style.display = 'block';
-    
+
     const restartBtn = document.getElementById('restartJobBtn');
     if (restartBtn) restartBtn.style.display = 'block';
 
     const stepsEl = document.getElementById('progressSteps');
     stepsEl.innerHTML = Object.entries(STEP_CONFIG).map(([key, cfg]) => `
-        <div class="progress-step" id="step-${key}">
+        <div class="progress-step step-clickable" id="step-${key}" onclick="openStepDetail('${key}')" title="Click to inspect this step">
             <div class="step-indicator pending" id="indicator-${key}">
                 <span>${cfg.icon}</span>
             </div>
@@ -487,6 +487,7 @@ function showProgressSection() {
                 <div class="step-label">${cfg.label}</div>
                 <div class="step-detail" id="detail-${key}">Waiting...</div>
             </div>
+            <div class="step-inspect-hint">›</div>
         </div>
     `).join('');
 }
@@ -1460,7 +1461,7 @@ window.exportToExcel = exportToExcel;
 
 async function flagForReview() {
     if (!confirm("Flag this analysis as broken or failing AI extraction?")) return;
-    
+
     try {
         const res = await authFetch(`/api/flag_for_review/${_currentValidationJobId}`, { method: 'POST' });
         if (res.ok) {
@@ -1471,4 +1472,261 @@ async function flagForReview() {
     } catch(err) {
         showToast("Network error.", "error");
     }
+}
+
+// ── Step Detail Inspector ─────────────────────────────────────
+
+let _stepDetailOpen = null;
+
+async function openStepDetail(step) {
+    const jobId = _currentJobId || _currentValidationJobId;
+    if (!jobId) return;
+
+    // Highlight selected step
+    document.querySelectorAll('.progress-step').forEach(el => el.classList.remove('step-selected'));
+    const stepEl = document.getElementById(`step-${step}`);
+    if (stepEl) stepEl.classList.add('step-selected');
+    _stepDetailOpen = step;
+
+    const panel = document.getElementById('stepDetailPanel');
+    const title = document.getElementById('stepDetailTitle');
+    const content = document.getElementById('stepDetailContent');
+    const advBtn = document.getElementById('advanceWorkflowBtn');
+
+    panel.style.display = 'block';
+    title.textContent = `${STEP_CONFIG[step]?.icon || ''} ${STEP_CONFIG[step]?.label || step}`;
+    content.innerHTML = '<div class="spinner" style="margin:16px auto"></div>';
+    advBtn.style.display = 'none';
+
+    try {
+        const res = await authFetch(`/api/result/${jobId}`);
+        const data = await res.json();
+
+        const statusBadge = _renderStatusBadge(step);
+        const stepContent = _renderStepData(step, data);
+
+        // Show "Push Ahead" if job appears stuck (not completed, not failed, has extraction data or is running)
+        const canAdvance = data.status !== 'completed' && data.status !== 'failed';
+        if (canAdvance) {
+            advBtn.style.display = 'inline-flex';
+        }
+
+        content.innerHTML = `
+            <div style="margin-bottom:12px">${statusBadge}</div>
+            ${stepContent}
+        `;
+    } catch (err) {
+        content.innerHTML = '<p style="color:var(--danger)">Failed to load step data.</p>';
+    }
+}
+window.openStepDetail = openStepDetail;
+
+function closeStepDetail() {
+    document.getElementById('stepDetailPanel').style.display = 'none';
+    document.querySelectorAll('.progress-step').forEach(el => el.classList.remove('step-selected'));
+    _stepDetailOpen = null;
+}
+window.closeStepDetail = closeStepDetail;
+
+async function advanceWorkflow() {
+    const jobId = _currentJobId || _currentValidationJobId;
+    if (!jobId) { showToast('No active job found.', 'error'); return; }
+
+    const btn = document.getElementById('advanceWorkflowBtn');
+    btn.disabled = true;
+    btn.textContent = 'Pushing...';
+
+    try {
+        const res = await authFetch(`/api/restart_job/${jobId}`, { method: 'POST' });
+        const data = await res.json();
+
+        if (res.ok) {
+            showToast('Workflow pushed ahead!', 'success');
+            closeStepDetail();
+            const vPane = document.getElementById('validationRightPane');
+            if (vPane) vPane.style.display = 'none';
+
+            if (data.status === 'awaiting_projection') {
+                showProjectionUploadView(jobId);
+            } else if (data.status === 'restarted' || data.status === 'resuming') {
+                listenToProgress(jobId);
+            }
+        } else {
+            showToast(data.error || 'Could not advance workflow.', 'error');
+        }
+    } catch (err) {
+        showToast('Network error.', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '⏩ Push Ahead';
+}
+window.advanceWorkflow = advanceWorkflow;
+
+function _renderStatusBadge(step) {
+    const stepEl = document.getElementById(`step-${step}`);
+    const isDone = stepEl && stepEl.classList.contains('done');
+    const isActive = stepEl && stepEl.classList.contains('active');
+    const statusText = isDone ? 'Completed' : isActive ? 'In Progress' : 'Pending';
+    const color = isDone ? 'var(--success)' : isActive ? 'var(--accent)' : 'var(--text-muted)';
+    const detailMsg = document.getElementById(`detail-${step}`)?.textContent || '';
+    return `
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="display:inline-block;padding:2px 10px;border-radius:99px;background:${color}22;color:${color};font-size:12px;font-weight:600">${statusText}</span>
+            ${detailMsg ? `<span style="font-size:13px;color:var(--text-muted)">${detailMsg}</span>` : ''}
+        </div>`;
+}
+
+function _renderStepData(step, data) {
+    const fmt = (v) => v == null ? '<span style="color:var(--text-muted)">—</span>' : Number(v).toLocaleString();
+    const row = (label, val) => `<tr><td style="padding:5px 10px;color:var(--text-muted);font-size:13px;white-space:nowrap">${label}</td><td style="padding:5px 10px;font-size:13px;font-weight:500">${val}</td></tr>`;
+
+    if (step === 'parse') {
+        const files = (data.filenames || []).join(', ') || '—';
+        const textLen = data.parsed_text ? data.parsed_text.length.toLocaleString() + ' chars' : '—';
+        return `<table style="width:100%;border-collapse:collapse">
+            ${row('Company', data.company_name || '—')}
+            ${row('Files', files)}
+            ${row('Text extracted', textLen)}
+            ${row('Gemini files uploaded', (data.gemini_files || []).length)}
+        </table>`;
+    }
+
+    if (step === 'categorize') {
+        const catalog = data.document_catalog || [];
+        if (!catalog.length) return '<p style="color:var(--text-muted);font-size:13px">No catalog data yet.</p>';
+        return `<table style="width:100%;border-collapse:collapse">
+            <thead><tr><th style="padding:5px 10px;text-align:left;font-size:12px;color:var(--text-muted)">File</th><th style="padding:5px 10px;text-align:left;font-size:12px;color:var(--text-muted)">Category</th></tr></thead>
+            <tbody>${catalog.map(c => `<tr><td style="padding:5px 10px;font-size:13px">${c.filename}</td><td style="padding:5px 10px;font-size:13px;color:var(--accent)">${c.category}</td></tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    if (step === 'extract') {
+        const fin = data.extracted_financials;
+        if (!fin) return '<p style="color:var(--text-muted);font-size:13px">Extraction not yet complete.</p>';
+        const years = fin.years_found || [];
+        const keyFields = ['revenue', 'net_profit', 'total_assets', 'equity', 'total_debt', 'operating_cash_flow'];
+        return `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr>
+                <th style="padding:5px 10px;text-align:left;color:var(--text-muted)">Field</th>
+                ${years.map(y => `<th style="padding:5px 10px;text-align:right;color:var(--accent)">${y}</th>`).join('')}
+            </tr></thead>
+            <tbody>${keyFields.map(f => `<tr>
+                <td style="padding:5px 10px;white-space:nowrap">${f.replace(/_/g,' ').replace(/\b\w/g,l=>l.toUpperCase())}</td>
+                ${years.map(y => `<td style="padding:5px 10px;text-align:right;font-family:monospace">${fmt(fin[y]?.[f])}</td>`).join('')}
+            </tr>`).join('')}</tbody>
+        </table></div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:8px">${years.length} year(s) extracted. Click "Push Ahead" if the workflow is stuck here.</p>`;
+    }
+
+    if (step === 'projection') {
+        const files = data.projection_filenames || [];
+        return files.length
+            ? `<p style="font-size:13px">Projection files: <strong>${files.join(', ')}</strong></p>`
+            : '<p style="color:var(--text-muted);font-size:13px">No projection files uploaded yet.</p>';
+    }
+
+    if (step === 'validate') {
+        return data.extracted_financials
+            ? '<p style="font-size:13px">Financials extracted and awaiting human validation. Use the validation table on the right panel.</p>'
+            : '<p style="color:var(--text-muted);font-size:13px">Validation not started yet.</p>';
+    }
+
+    if (step === 'web') {
+        const website = data.company_website || '—';
+        const numComp = Array.isArray(data.competitors) ? data.competitors.length : (data.competitors ? Object.keys(data.competitors).length : 0);
+        return `<table style="width:100%;border-collapse:collapse">
+            ${row('Website', website)}
+            ${row('Competitors found', numComp)}
+        </table>`;
+    }
+
+    if (step === 'background') {
+        const bg = data.result?.company_background || data.background || {};
+        if (!bg || !Object.keys(bg).length) return '<p style="color:var(--text-muted);font-size:13px">Background analysis not yet complete.</p>';
+        return `<table style="width:100%;border-collapse:collapse">
+            ${row('Industry', bg.industry || '—')}
+            ${row('Sub-Industry', bg.sub_industry || '—')}
+            ${row('Business Model', bg.business_model || '—')}
+            ${row('HQ', bg.headquarters || '—')}
+        </table>
+        ${bg.company_description ? `<p style="margin-top:10px;font-size:13px;color:var(--text-secondary)">${bg.company_description.slice(0,300)}…</p>` : ''}`;
+    }
+
+    if (step === 'competitors') {
+        const comp = data.result?.competitor_analysis || data.competitors || {};
+        const list = comp.competitors || comp.top_competitors || [];
+        if (!list.length) return '<p style="color:var(--text-muted);font-size:13px">Competitor analysis not yet complete.</p>';
+        return `<ul style="list-style:none;padding:0;display:flex;flex-direction:column;gap:4px">
+            ${list.slice(0,5).map(c => `<li style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
+                <strong>${c.name || c}</strong>${c.market_position ? ` — ${c.market_position}` : ''}
+            </li>`).join('')}
+        </ul>`;
+    }
+
+    if (step === 'ratios') {
+        const ratios = data.result?.computed_ratios || {};
+        if (!Object.keys(ratios).length) return '<p style="color:var(--text-muted);font-size:13px">Ratios not yet calculated.</p>';
+        // Show first year's first category as a sample
+        const firstYear = Object.keys(ratios)[0];
+        const yearData = ratios[firstYear] || {};
+        const firstCat = Object.keys(yearData)[0];
+        const items = yearData[firstCat] || {};
+        return `<p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">${firstYear} · ${firstCat}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tbody>${Object.entries(items).slice(0,6).map(([name,d]) => `<tr>
+                <td style="padding:4px 8px;color:var(--text-muted)">${name}</td>
+                <td style="padding:4px 8px;font-family:monospace;font-weight:600">${d?.formatted || '—'}</td>
+                <td style="padding:4px 8px;font-size:12px;color:${d?.status?.includes('PASS')?'var(--success)':'var(--danger)'}">${d?.status || ''}</td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    }
+
+    if (step === 'financial') {
+        const fin = data.result?.financial_analysis || {};
+        const summary = fin.executive_summary || '';
+        if (!summary) return '<p style="color:var(--text-muted);font-size:13px">Financial analysis not yet complete.</p>';
+        return `<p style="font-size:13px;color:var(--text-secondary);line-height:1.6">${summary.slice(0,400)}${summary.length > 400 ? '…' : ''}</p>`;
+    }
+
+    if (step === 'risks') {
+        const risk = data.result?.risk_analysis || {};
+        const factors = risk.risk_factors || [];
+        if (!factors.length) return '<p style="color:var(--text-muted);font-size:13px">Risk assessment not yet complete.</p>';
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:13px;font-weight:600">Overall Risk:</span>
+            <span style="padding:2px 8px;border-radius:99px;font-size:12px;background:var(--${risk.overall_risk_rating==='High'?'red':'warning'}22);color:var(--${risk.overall_risk_rating==='High'?'danger':'warning'})">${risk.overall_risk_rating || 'N/A'}</span>
+        </div>
+        <ul style="list-style:none;padding:0;display:flex;flex-direction:column;gap:4px">
+            ${factors.slice(0,4).map(r => `<li style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
+                <span style="font-weight:600;color:var(--danger)">${r.severity || ''}</span> · ${r.category || ''}: ${(r.description||'').slice(0,80)}…
+            </li>`).join('')}
+        </ul>`;
+    }
+
+    if (step === 'recommendation') {
+        const rec = data.result?.recommendation || {};
+        if (!rec.recommendation) return '<p style="color:var(--text-muted);font-size:13px">Recommendation not yet generated.</p>';
+        const v = (rec.recommendation || '').toUpperCase();
+        const vColor = v==='BUY'?'var(--success)':v==='HOLD'?'var(--warning)':'var(--danger)';
+        return `<div style="text-align:center;padding:16px 0">
+            <div style="font-size:36px;font-weight:900;color:${vColor}">${v}</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Confidence: ${rec.confidence_level || 'N/A'} · Horizon: ${rec.target_horizon || 'N/A'}</div>
+            ${rec.summary ? `<p style="font-size:13px;margin-top:10px;color:var(--text-secondary)">${rec.summary.slice(0,250)}…</p>` : ''}
+        </div>`;
+    }
+
+    if (step === 'report') {
+        return data.report_path
+            ? `<p style="font-size:13px">Report generated: <strong>${data.report_path.split('/').pop()}</strong></p>`
+            : '<p style="color:var(--text-muted);font-size:13px">Report not yet generated.</p>';
+    }
+
+    if (step === 'save') {
+        return data.status === 'completed'
+            ? '<p style="font-size:13px;color:var(--success)">Analysis saved to your profile.</p>'
+            : '<p style="color:var(--text-muted);font-size:13px">Save pending completion.</p>';
+    }
+
+    return '<p style="color:var(--text-muted);font-size:13px">No additional data available for this step.</p>';
 }

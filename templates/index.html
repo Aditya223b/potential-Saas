@@ -7,7 +7,7 @@
     <meta name="description" content="AI-powered financial statement analysis with user profiles and history.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=8">
+    <link rel="stylesheet" href="/static/style.css?v=9">
 </head>
 <body>
 
@@ -265,6 +265,18 @@
                             <button id="restartJobBtn" class="btn btn-sm btn-ghost" style="color: var(--warning); border-color: var(--warning); display: none;" onclick="restartWorkflow()">🔄 Force Restart</button>
                         </div>
                         <div class="progress-steps" id="progressSteps"></div>
+
+                        <!-- Step Detail Inspector Panel -->
+                        <div id="stepDetailPanel" class="step-detail-panel" style="display:none">
+                            <div class="step-detail-header">
+                                <span id="stepDetailTitle" style="font-weight:600;font-size:15px"></span>
+                                <div style="display:flex;gap:8px;align-items:center">
+                                    <button class="btn btn-sm btn-primary" id="advanceWorkflowBtn" onclick="advanceWorkflow()" style="display:none">⏩ Push Ahead</button>
+                                    <button class="btn btn-sm btn-ghost" onclick="closeStepDetail()">✕</button>
+                                </div>
+                            </div>
+                            <div id="stepDetailContent" class="step-detail-content"></div>
+                        </div>
                     </div>
                     
                     <!-- Right Side: Maths Validation (Hidden until needed) -->
@@ -346,7 +358,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for Excel formatting -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-<script src="/static/app.js?v=2"></script>
+<script src="/static/app.js?v=3"></script>
 
 </body>
 </html>
