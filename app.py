@@ -633,7 +633,10 @@ def upload():
         return jsonify({"error": "No valid PDF files found"}), 400
 
     job = AnalysisJob(job_id, filenames, user_id=user_id)
-    # Step 1: Initialize job state in Redis/Supabase
+    # Step 1: Initialize job row in Supabase (INSERT), then persist state
+    if user_id:
+        from supabase_client import create_job
+        create_job(job_id, user_id, filenames)
     job.set_status("pending")
 
     rate_limiter.record(user_id)

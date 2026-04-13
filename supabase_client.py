@@ -59,9 +59,10 @@ def create_job(job_id: str, user_id: str | None, filenames: list[str]) -> bool:
 
 
 def update_job(job_id: str, **fields) -> bool:
-    """Partial update any fields on a job row."""
+    """Upsert job state — inserts if the row doesn't exist yet, updates otherwise."""
     try:
-        _get_admin_client().table("jobs").update(fields).eq("job_id", job_id).execute()
+        row = {"job_id": job_id, **fields}
+        _get_admin_client().table("jobs").upsert(row, on_conflict="job_id").execute()
         return True
     except Exception as e:
         print(f"⚠️  update_job failed: {e}")
