@@ -269,21 +269,40 @@
                     
                     <!-- Right Side: Maths Validation (Hidden until needed) -->
                     <div class="validation-right-pane" id="validationRightPane" style="display:none;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <h3>🔍 Validate Extracted Financials</h3>
-                            <button class="btn btn-sm btn-ghost" onclick="exportToExcel()">⬇️ Download Excel</button>
-                        </div>
-                        <p class="subtitle" style="margin-bottom: 16px;">
-                            Review the extracted figures. Values marked in <strong style="color:var(--danger)">Red</strong> indicate math errors.
-                        </p>
-                        
-                        <div id="validationTableContainer" style="flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
-                            <!-- Dynamic editable table will be injected here -->
+                        <div id="projectionUploadPanel">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h3>📈 Upload Company Projections</h3>
+                            </div>
+                            <p class="subtitle" style="margin-bottom: 16px;">
+                                Stage 1 is complete. Upload the company’s projected financials before analyst verification.
+                            </p>
+                            <div class="projection-upload-card">
+                                <input type="file" id="projectionFileInput" accept=".pdf,.xlsx,.xls" multiple>
+                                <p class="projection-help">Upload PDF or Excel projection files shared by the company.</p>
+                                <div id="projectionFileList" class="file-list" style="display:none;"></div>
+                            </div>
+                            <div class="modal-actions" style="margin-top: 24px;">
+                                <button class="btn btn-primary" id="uploadProjectionBtn" onclick="uploadProjectionFiles()">Continue to Verification</button>
+                            </div>
                         </div>
 
-                        <div class="modal-actions" style="margin-top: 24px;">
-                            <div id="validationWarning" style="color:var(--danger); font-size: 14px; font-weight: 500; display:none;"></div>
-                            <button class="btn btn-primary" id="approveFinancialsBtn" onclick="approveAndContinue()">✓ Approve & Continue</button>
+                        <div id="validationPanel" style="display:none; flex:1; flex-direction:column; min-height:0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h3>🔍 Validate Extracted Financials</h3>
+                                <button class="btn btn-sm btn-ghost" onclick="exportToExcel()">⬇️ Download Excel</button>
+                            </div>
+                            <p class="subtitle" style="margin-bottom: 16px;">
+                                Review the extracted figures. Values marked in <strong style="color:var(--danger)">Red</strong> indicate math errors. Use <strong>View Source</strong> to inspect the originating table snapshot.
+                            </p>
+                            
+                            <div id="validationTableContainer" style="flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
+                                <!-- Dynamic editable table will be injected here -->
+                            </div>
+
+                            <div class="modal-actions" style="margin-top: 24px;">
+                                <div id="validationWarning" style="color:var(--danger); font-size: 14px; font-weight: 500; display:none;"></div>
+                                <button class="btn btn-primary" id="approveFinancialsBtn" onclick="approveAndContinue()">✓ Approve & Continue to AI Analysis</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -305,6 +324,17 @@
         <div class="modal-actions">
             <button class="btn btn-ghost" onclick="closeEmailModal()">Cancel</button>
             <button class="btn btn-primary" id="sendEmailBtn" onclick="sendEmail()">Send Report</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="sourceModal">
+    <div class="modal source-modal">
+        <h3>Source Evidence</h3>
+        <p id="sourceMetaText">Loading source details...</p>
+        <div id="sourceImageContainer" class="source-image-container"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeSourceModal()">Close</button>
         </div>
     </div>
 </div>

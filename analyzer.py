@@ -151,6 +151,22 @@ Return a JSON object organized BY YEAR with these keys for EACH year found:
     }},
     "FY2024": {{
         ... same structure ...
+    }},
+    "sources": {{
+        "FY2025": {{
+            "revenue": {{
+                "source_file": "name of uploaded file where this value was found",
+                "page_number": 1,
+                "excerpt": "short line or table row showing the value in context"
+            }}
+        }},
+        "FY2024": {{
+            "...": {{
+                "source_file": "file name",
+                "page_number": 1,
+                "excerpt": "supporting excerpt"
+            }}
+        }}
     }}
 }}
 
@@ -162,6 +178,8 @@ IMPORTANT NOTES:
 - `reserves` = Reserves & Surplus (or Net Worth minus share capital). This is CRITICAL.
 - `equity` = Equity Share Capital + Reserves & Surplus.
 - `total_debt` = long_term_borrowings + short_term_borrowings.
+- For every extracted numeric field, populate `sources` with the best supporting file name, page number, and excerpt.
+- Keep each `excerpt` short and table-oriented so it can be used to render a source preview for analyst verification.
 
 Return ONLY the JSON object, no explanation.
 """
@@ -557,4 +575,3 @@ def _compute_growth_metrics(financials: dict) -> dict:
         "total_assets_growth": pct(latest.get("total_assets"), prior.get("total_assets")),
         "equity_growth": pct(latest.get("equity"), prior.get("equity")),
     }
-

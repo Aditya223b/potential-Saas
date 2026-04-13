@@ -4,6 +4,7 @@ let _session = null;
 let _isLoginMode = true;
 
 let selectedFiles = [];
+let selectedProjectionFiles = [];
 let _currentJobId = null; // Renamed from currentJobId for consistency
 let historyAnalyses = [];
 
@@ -96,6 +97,9 @@ async function rehydrateState() {
         wizardSection.style.display = 'none';
         progressSection.style.display = 'block';
         listenToProgress(savedJobId);
+    } else if (savedView === 'projection' && savedJobId) {
+        _currentJobId = savedJobId;
+        showProjectionUploadView(savedJobId);
     } else if (savedView === 'validation' && savedJobId) {
         _currentJobId = savedJobId;
         showValidationSplitView(savedJobId);
@@ -295,6 +299,7 @@ function goToStep(step) {
 function newAnalysis() {
     clearAppState();
     selectedFiles = [];
+    selectedProjectionFiles = [];
     _currentJobId = null;
     wizardSection.style.display = 'block';
     progressSection.style.display = 'none';
@@ -315,6 +320,10 @@ window.showNewAnalysis = newAnalysis;
 // ── File Handling ───────────────────────────────────────────
 function setupFileListeners() {
     fileInput.addEventListener('change', (e) => addFiles(Array.from(e.target.files)));
+    const projectionFileInput = document.getElementById('projectionFileInput');
+    if (projectionFileInput) {
+        projectionFileInput.addEventListener('change', (e) => addProjectionFiles(Array.from(e.target.files)));
+    }
     const companyContextInput = document.getElementById('companyContextInput');
     if (companyContextInput) {
         companyContextInput.addEventListener('input', syncCompanyContextInput);
@@ -339,6 +348,22 @@ function addFiles(files) {
     renderFileList();
 }
 
+function addProjectionFiles(files) {
+    files.forEach(f => {
+        const valid = /\.(pdf|xlsx|xls)$/i.test(f.name);
+        if (valid && !selectedProjectionFiles.find(sf => sf.name === f.name)) {
+            selectedProjectionFiles.push(f);
+        }
+    });
+    renderProjectionFileList();
+}
+
+function removeProjectionFile(index) {
+    selectedProjectionFiles.splice(index, 1);
+    renderProjectionFileList();
+}
+window.removeProjectionFile = removeProjectionFile;
+
 function removeFile(index) {
     selectedFiles.splice(index, 1);
     renderFileList();
@@ -359,6 +384,24 @@ function renderFileList() {
             <span class="file-name">${f.name}</span>
             <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
             <button class="file-remove" onclick="removeFile(${i})">✕</button>
+        </div>
+    `).join('');
+}
+
+function renderProjectionFileList() {
+    const projectionFileList = document.getElementById('projectionFileList');
+    if (!projectionFileList) return;
+    if (selectedProjectionFiles.length === 0) {
+        projectionFileList.style.display = 'none';
+        return;
+    }
+    projectionFileList.style.display = 'block';
+    projectionFileList.innerHTML = selectedProjectionFiles.map((f, i) => `
+        <div class="file-item">
+            <span class="file-icon">📈</span>
+            <span class="file-name">${f.name}</span>
+            <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
+            <button class="file-remove" onclick="removeProjectionFile(${i})">✕</button>
         </div>
     `).join('');
 }
@@ -413,8 +456,11 @@ window.startAnalysis = startAnalysis;
 // ── Progress Tracking ───────────────────────────────────────
 const STEP_CONFIG = {
     parse: { label: 'Parsing Financial Statements', icon: '📄' },
-    web: { label: 'Web Research', icon: '🌐' },
+    categorize: { label: 'Document Categorisation', icon: '🗂️' },
     extract: { label: 'Extracting Financial Figures', icon: '🔢' },
+    projection: { label: 'Upload Company Projections', icon: '📈' },
+    validate: { label: 'Analyst Verification', icon: '🔍' },
+    web: { label: 'Web Research', icon: '🌐' },
     background: { label: 'Company Background Analysis', icon: '🏢' },
     competitors: { label: 'Competitor Analysis', icon: '⚔️' },
     ratios: { label: 'Calculating Financial Ratios', icon: '📊' },
@@ -452,6 +498,12 @@ function listenToProgress(jobId, _retryCount = 0) {
     
     es.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
+        if (data.step === 'awaiting_projection') {
+            es.close();
+            setTimeout(() => showProjectionUploadView(jobId), 500);
+            return;
+        }
         
         if (data.step === 'waiting_for_user') {
             es.close();
@@ -493,6 +545,8 @@ function listenToProgress(jobId, _retryCount = 0) {
                 const data = await res.json();
                 if (data.status === 'completed' || data.status === 'failed') {
                     loadResults(jobId);
+                } else if (data.status === 'awaiting_projection') {
+                    showProjectionUploadView(jobId);
                 } else if (data.status === 'waiting_for_user') {
                     showValidationSplitView(jobId);
                 } else {
@@ -522,6 +576,9 @@ function pollProgress(jobId) {
             if (data.status === 'waiting_for_user') {
                 clearInterval(interval);
                 showValidationSplitView(jobId);
+            } else if (data.status === 'awaiting_projection') {
+                clearInterval(interval);
+                showProjectionUploadView(jobId);
             } else if (data.status === 'completed') {
                 clearInterval(interval);
                 loadResults(jobId);
@@ -971,6 +1028,65 @@ window.sendEmail = sendEmail;
 
 let _currentValidationFinancials = null;
 let _currentValidationJobId = null;
+let _currentValidationSources = {};
+let _currentValidationSourcePreviews = {};
+
+function showProjectionUploadView(jobId) {
+    _currentValidationJobId = jobId;
+    saveAppState('projection', jobId);
+
+    wizardSection.style.display = 'none';
+    progressSection.style.display = 'block';
+    resultsSection.style.display = 'none';
+
+    const rightPane = document.getElementById('validationRightPane');
+    const projectionPanel = document.getElementById('projectionUploadPanel');
+    const validationPanel = document.getElementById('validationPanel');
+
+    if (rightPane) rightPane.style.display = 'flex';
+    if (projectionPanel) projectionPanel.style.display = 'block';
+    if (validationPanel) validationPanel.style.display = 'none';
+    renderProjectionFileList();
+}
+
+async function uploadProjectionFiles() {
+    if (!_currentValidationJobId) {
+        showToast('No active job found for projection upload.', 'error');
+        return;
+    }
+    if (selectedProjectionFiles.length === 0) {
+        showToast('Upload at least one projection file to continue.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('uploadProjectionBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Uploading...';
+
+    try {
+        const formData = new FormData();
+        selectedProjectionFiles.forEach(file => formData.append('projection_files', file));
+        const res = await authFetch(`/api/upload_projection/${_currentValidationJobId}`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Projection upload failed.', 'error');
+            return;
+        }
+
+        selectedProjectionFiles = [];
+        renderProjectionFileList();
+        showValidationSplitView(_currentValidationJobId);
+    } catch (err) {
+        showToast('Network error while uploading projection files.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Continue to Verification';
+    }
+}
+window.uploadProjectionFiles = uploadProjectionFiles;
 
 async function showValidationSplitView(jobId) {
     _currentValidationJobId = jobId;
@@ -987,8 +1103,15 @@ async function showValidationSplitView(jobId) {
         const data = await res.json();
         if (data.extracted_financials) {
             _currentValidationFinancials = data.extracted_financials;
+            _currentValidationSources = data.extraction_sources || {};
+            _currentValidationSourcePreviews = data.source_previews || {};
+            const rightPane = document.getElementById('validationRightPane');
+            const projectionPanel = document.getElementById('projectionUploadPanel');
+            const validationPanel = document.getElementById('validationPanel');
+            if (rightPane) rightPane.style.display = 'flex';
+            if (projectionPanel) projectionPanel.style.display = 'none';
+            if (validationPanel) validationPanel.style.display = 'flex';
             renderValidationTable();
-            document.getElementById('validationRightPane').style.display = 'flex';
         } else {
             showToast("Failed to load financial data for validation.", "error");
         }
@@ -1035,17 +1158,22 @@ function renderValidationTable() {
             const val = fin[y] ? fin[y][f] : null;
             const isNull = val === null || val === '';
             const valStr = isNull ? '' : val;
+            const sourceInfo = ((_currentValidationSources || {})[y] || {})[f];
+            const hasSource = !!sourceInfo;
             
             html += `<td>
-                <input type="number" 
-                    step="any"
-                    data-year="${y}" 
-                    data-field="${f}" 
-                    value="${valStr}" 
-                    placeholder="${isNull ? 'null' : '0'}"
-                    style="width:100%; box-sizing:border-box; padding:6px 8px; font-size:13px; font-family:monospace; border-radius:4px; color:var(--text-primary); outline:none; border:1px solid ${isNull ? 'var(--warning, #f59e0b)' : 'var(--border)'}; background:${isNull ? 'rgba(245,158,11,0.15)' : 'var(--bg-secondary)'}"
-                    onchange="handleFinancialEdit('${y}', '${f}', this)"
-                />
+                <div class="field-cell">
+                    <input type="number" 
+                        step="any"
+                        data-year="${y}" 
+                        data-field="${f}" 
+                        value="${valStr}" 
+                        placeholder="${isNull ? 'null' : '0'}"
+                        style="width:100%; box-sizing:border-box; padding:6px 8px; font-size:13px; font-family:monospace; border-radius:4px; color:var(--text-primary); outline:none; border:1px solid ${isNull ? 'var(--warning, #f59e0b)' : 'var(--border)'}; background:${isNull ? 'rgba(245,158,11,0.15)' : 'var(--bg-secondary)'}"
+                        onchange="handleFinancialEdit('${y}', '${f}', this)"
+                    />
+                    ${hasSource ? `<button class="source-btn" type="button" onclick="openSourceModal('${y}', '${f}')">View Source</button>` : ''}
+                </div>
             </td>`;
         });
         
@@ -1246,6 +1374,52 @@ async function approveAndContinue() {
     btn.disabled = false;
     btn.innerHTML = '✓ Approve & Continue';
 }
+
+async function openSourceModal(year, field) {
+    const modal = document.getElementById('sourceModal');
+    const meta = document.getElementById('sourceMetaText');
+    const container = document.getElementById('sourceImageContainer');
+    if (!modal || !meta || !container) return;
+
+    modal.classList.add('active');
+    meta.textContent = 'Loading source details...';
+    container.innerHTML = '<div class="spinner"></div>';
+
+    try {
+        const res = await authFetch(`/api/source-preview/${_currentValidationJobId}?year=${encodeURIComponent(year)}&field=${encodeURIComponent(field)}`);
+        const data = await res.json();
+        if (!res.ok) {
+            meta.textContent = data.error || 'Source preview unavailable.';
+            container.innerHTML = '';
+            return;
+        }
+
+        const preview = data.preview || {};
+        const source = data.source || {};
+        meta.textContent = `${year} • ${field.replace(/_/g, ' ')} • ${preview.source_file || source.source_file || 'Unknown file'} • Page ${preview.page_number || source.page_number || 'N/A'}`;
+
+        if (data.image_url) {
+            const excerpt = preview.excerpt || source.excerpt || '';
+            container.innerHTML = `
+                <div style="width:100%">
+                    <img src="${data.image_url}" alt="Source preview for ${field}">
+                    ${excerpt ? `<p style="margin-top:12px">${excerpt}</p>` : ''}
+                </div>
+            `;
+        } else {
+            container.innerHTML = `<p>${preview.excerpt || source.excerpt || 'Source image unavailable for this field.'}</p>`;
+        }
+    } catch (err) {
+        meta.textContent = 'Failed to load source preview.';
+        container.innerHTML = '';
+    }
+}
+window.openSourceModal = openSourceModal;
+
+function closeSourceModal() {
+    document.getElementById('sourceModal').classList.remove('active');
+}
+window.closeSourceModal = closeSourceModal;
 
 function exportToExcel() {
     if (!_currentValidationFinancials) return;

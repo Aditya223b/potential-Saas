@@ -676,6 +676,42 @@ h1, h2, h3, h4 { letter-spacing: -0.5px; }
     overflow: hidden;
 }
 
+.projection-upload-card {
+    border: 1px dashed var(--border-active);
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.projection-help {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+}
+
+.field-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.source-btn {
+    align-self: flex-start;
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.source-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .risk-item { padding: 16px; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 12px; border-left: 4px solid var(--text-muted); }
 .risk-item.high { border-left-color: var(--red); }
 .risk-item.medium { border-left-color: var(--orange); }
@@ -691,9 +727,29 @@ h1, h2, h3, h4 { letter-spacing: -0.5px; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 100; }
 .modal-overlay.active { display: flex; }
 .modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; width: 400px; max-width: 90vw; }
+.source-modal { width: min(920px, 92vw); }
 .modal h3 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
 .modal p { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
 .modal-actions { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; }
+
+.source-image-container {
+    min-height: 220px;
+    max-height: 70vh;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+}
+
+.source-image-container img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
 
 .toast { position: fixed; bottom: 32px; right: 32px; padding: 16px 24px; border-radius: var(--radius); font-size: 14px; font-weight: 600; z-index: 200; transform: translateY(100px); opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .toast.show { transform: translateY(0); opacity: 1; }
