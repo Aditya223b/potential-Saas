@@ -596,8 +596,13 @@ h1, h2, h3, h4 {
   color: var(--text-muted);
   white-space: nowrap;
 }
-.btn-resume {
+.inprogress-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   flex-shrink: 0;
+}
+.btn-resume {
   padding: 4px 9px;
   font-size: 11px;
   font-weight: 600;
@@ -610,6 +615,38 @@ h1, h2, h3, h4 {
   white-space: nowrap;
 }
 .btn-resume:hover { background: var(--accent-light); }
+.btn-job-stop,
+.btn-job-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+}
+.btn-job-stop {
+  background: rgba(255, 160, 0, 0.12);
+  color: #ffa500;
+}
+.btn-job-stop:hover {
+  background: rgba(255, 160, 0, 0.25);
+  color: #ffb733;
+}
+.btn-job-stop:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-job-delete {
+  background: rgba(255, 60, 60, 0.12);
+  color: #ff4444;
+}
+.btn-job-delete:hover {
+  background: rgba(255, 60, 60, 0.25);
+  color: #ff6666;
+}
+.btn-job-delete:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Main Content ──────────────────────────────────────────── */
 .main-content {
@@ -1305,6 +1342,20 @@ html[data-theme="light"] .inprogress-item:hover {
 html[data-theme="light"] .inprogress-status {
   background: rgba(0, 113, 227, 0.10);
   color: var(--accent);
+}
+html[data-theme="light"] .btn-job-stop {
+  background: rgba(200, 120, 0, 0.10);
+  color: #c07800;
+}
+html[data-theme="light"] .btn-job-stop:hover {
+  background: rgba(200, 120, 0, 0.20);
+}
+html[data-theme="light"] .btn-job-delete {
+  background: rgba(200, 30, 30, 0.10);
+  color: #cc2222;
+}
+html[data-theme="light"] .btn-job-delete:hover {
+  background: rgba(200, 30, 30, 0.20);
 }
 
 /* ── Light mode main content ───────────────────────────────── */

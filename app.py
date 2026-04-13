@@ -965,6 +965,44 @@ def my_jobs():
     return jsonify({"jobs": jobs})
 
 
+@app.route("/api/jobs/<job_id>/stop", methods=["POST"])
+@require_auth
+def stop_job(job_id):
+    """Mark an in-progress job as stopped (failed) so it leaves the In-Progress pane."""
+    job = get_job_object(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job.user_id and job.user_id != g.user["id"]:
+        return jsonify({"error": "Forbidden"}), 403
+
+    job.add_progress("error", "🛑 Analysis stopped by user.", done=True)
+    job.set_status("failed")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/jobs/<job_id>", methods=["DELETE"])
+@require_auth
+def delete_job_route(job_id):
+    """Delete an in-progress job from Redis and Supabase."""
+    job = get_job_object(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job.user_id and job.user_id != g.user["id"]:
+        return jsonify({"error": "Forbidden"}), 403
+
+    # Remove from Redis
+    try:
+        redis_conn.delete(f"job_state:{job_id}")
+    except Exception as e:
+        logger.warning(f"Redis delete failed for job {job_id}: {e}")
+
+    # Remove from Supabase jobs table
+    from supabase_client import delete_job
+    delete_job(job_id)
+
+    return jsonify({"ok": True})
+
+
 @app.route("/api/my-analyses")
 @require_auth
 def my_analyses():

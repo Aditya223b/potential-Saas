@@ -845,10 +845,58 @@ function renderInProgressList(jobs) {
                     <span class="inprogress-date">${date}</span>
                 </div>
             </div>
-            <button class="btn-resume" onclick="resumeJob('${job.job_id}', '${job.status}')">Resume →</button>
+            <div class="inprogress-actions">
+                <button class="btn-resume" onclick="resumeJob('${job.job_id}', '${job.status}')">Resume &rarr;</button>
+                <button class="btn-job-stop" title="Stop analysis" onclick="stopInProgressJob('${job.job_id}', this)">&#9632;</button>
+                <button class="btn-job-delete" title="Delete" onclick="deleteInProgressJob('${job.job_id}', this)">&#x2715;</button>
+            </div>
         </div>`;
     }).join('');
 }
+
+async function stopInProgressJob(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        const res = await authFetch(`/api/jobs/${jobId}/stop`, { method: 'POST' });
+        if (res.ok) {
+            document.getElementById(`inprogress-${jobId}`)?.remove();
+            loadInProgressJobs();
+            showToast('Analysis stopped.', 'success');
+        } else {
+            showToast('Failed to stop analysis.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '&#9632;';
+        }
+    } catch (e) {
+        showToast('Network error.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '&#9632;';
+    }
+}
+window.stopInProgressJob = stopInProgressJob;
+
+async function deleteInProgressJob(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+        const res = await authFetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+        if (res.ok) {
+            document.getElementById(`inprogress-${jobId}`)?.remove();
+            loadInProgressJobs();
+            showToast('Analysis deleted.', 'success');
+        } else {
+            showToast('Failed to delete analysis.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '&#x2715;';
+        }
+    } catch (e) {
+        showToast('Network error.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '&#x2715;';
+    }
+}
+window.deleteInProgressJob = deleteInProgressJob;
 
 async function resumeJob(jobId, status) {
     _currentJobId = jobId;
