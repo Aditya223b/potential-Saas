@@ -13,6 +13,7 @@ import uuid
 import time
 import logging
 import threading
+import base64
 from datetime import datetime
 from functools import wraps
 from flask import (
@@ -92,8 +93,6 @@ def _generate_source_previews(pdf_paths: list[str], sources: dict, job_id: str) 
         logger.warning(f"[{job_id}] Source previews unavailable: {e}")
         return {}
 
-    preview_dir = os.path.join(app.config["UPLOAD_FOLDER"], "source_previews", job_id)
-    os.makedirs(preview_dir, exist_ok=True)
     previews: dict[str, dict[str, dict]] = {}
 
     for year, field_map in sources.items():
@@ -110,6 +109,7 @@ def _generate_source_previews(pdf_paths: list[str], sources: dict, job_id: str) 
             if not pdf_path or not os.path.exists(pdf_path):
                 previews[year][field] = {
                     "image_path": "",
+                    "image_base64": "",
                     "page_number": page_number,
                     "source_file": source_info.get("source_file", ""),
                     "excerpt": excerpt,
@@ -132,11 +132,10 @@ def _generate_source_previews(pdf_paths: list[str], sources: dict, job_id: str) 
                         clip.y1 = min(page.rect.y1, clip.y1 + 140)
 
                 pix = page.get_pixmap(matrix=fitz.Matrix(1.8, 1.8), clip=clip, alpha=False)
-                image_name = f"{year}_{field}_{_safe_filename_fragment(os.path.basename(pdf_path))}.png"
-                image_path = os.path.join(preview_dir, image_name)
-                pix.save(image_path)
+                image_bytes = pix.tobytes("png")
                 previews[year][field] = {
-                    "image_path": image_path,
+                    "image_path": "",
+                    "image_base64": base64.b64encode(image_bytes).decode("ascii"),
                     "page_number": page_number,
                     "source_file": source_info.get("source_file", os.path.basename(pdf_path)),
                     "excerpt": excerpt,
@@ -146,6 +145,7 @@ def _generate_source_previews(pdf_paths: list[str], sources: dict, job_id: str) 
                 logger.warning(f"[{job_id}] Failed to render source preview for {year}.{field}: {e}")
                 previews[year][field] = {
                     "image_path": "",
+                    "image_base64": "",
                     "page_number": page_number,
                     "source_file": source_info.get("source_file", os.path.basename(pdf_path)),
                     "excerpt": excerpt,
@@ -828,6 +828,9 @@ def source_preview(job_id):
         return jsonify({"error": "Source preview not available"}), 404
 
     image_url = None
+    image_data_url = None
+    if preview and preview.get("image_base64"):
+        image_data_url = f"data:image/png;base64,{preview['image_base64']}"
     if preview and preview.get("image_path"):
         image_url = f"/api/source-image/{job_id}?year={year}&field={field}"
 
@@ -835,8 +838,13 @@ def source_preview(job_id):
         "year": year,
         "field": field,
         "source": source or {},
-        "preview": preview or {},
+        "preview": {
+            "page_number": (preview or {}).get("page_number"),
+            "source_file": (preview or {}).get("source_file"),
+            "excerpt": (preview or {}).get("excerpt"),
+        },
         "image_url": image_url,
+        "image_data_url": image_data_url,
     })
 
 
@@ -850,6 +858,10 @@ def source_image(job_id):
         return jsonify({"error": "Job not found"}), 404
 
     preview = ((job.source_previews or {}).get(year, {}) or {}).get(field)
+    image_base64 = (preview or {}).get("image_base64")
+    if image_base64:
+        return Response(base64.b64decode(image_base64), mimetype="image/png")
+
     image_path = (preview or {}).get("image_path")
     if not image_path or not os.path.exists(image_path):
         return jsonify({"error": "Source image not available"}), 404

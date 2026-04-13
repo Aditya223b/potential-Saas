@@ -1398,11 +1398,12 @@ async function openSourceModal(year, field) {
         const source = data.source || {};
         meta.textContent = `${year} • ${field.replace(/_/g, ' ')} • ${preview.source_file || source.source_file || 'Unknown file'} • Page ${preview.page_number || source.page_number || 'N/A'}`;
 
-        if (data.image_url) {
+        const imageSrc = data.image_data_url || data.image_url;
+        if (imageSrc) {
             const excerpt = preview.excerpt || source.excerpt || '';
             container.innerHTML = `
                 <div style="width:100%">
-                    <img src="${data.image_url}" alt="Source preview for ${field}">
+                    <img src="${imageSrc}" alt="Source preview for ${field}">
                     ${excerpt ? `<p style="margin-top:12px">${excerpt}</p>` : ''}
                 </div>
             `;
