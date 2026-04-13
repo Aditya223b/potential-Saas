@@ -81,25 +81,38 @@ window.onload = async () => {
 };
 
 async function rehydrateState() {
+    // Always refresh the In-Progress sidebar on load so interrupted jobs show up
+    loadInProgressJobs();
+
     const savedView = localStorage.getItem('fina_view');
     const savedJobId = localStorage.getItem('fina_job_id');
 
-    if (!savedView) return;
+    if (!savedView || !savedJobId) return;
 
-    if (savedView === 'progress' && savedJobId) {
-        _currentJobId = savedJobId;
-        wizardSection.style.display = 'none';
-        progressSection.style.display = 'block';
-        listenToProgress(savedJobId);
-    } else if (savedView === 'projection' && savedJobId) {
-        _currentJobId = savedJobId;
-        showProjectionUploadView(savedJobId);
-    } else if (savedView === 'validation' && savedJobId) {
-        _currentJobId = savedJobId;
-        showValidationSplitView(savedJobId);
-    } else if (savedView === 'results' && savedJobId) {
-        _currentJobId = savedJobId;
-        loadResults(savedJobId);
+    // Fetch the live job status before deciding which view to restore
+    try {
+        const res = await authFetch(`/api/result/${savedJobId}`);
+        if (!res.ok) { clearAppState(); return; }
+        const data = await res.json();
+        const status = data.status;
+
+        if (status === 'completed') {
+            // Completed — restore results view directly
+            _currentJobId = savedJobId;
+            loadResults(savedJobId);
+            return;
+        }
+
+        if (['failed', 'pending'].includes(status)) {
+            // Nothing useful to restore; let the In-Progress pane handle it
+            clearAppState();
+            return;
+        }
+
+        // Job is mid-flight — delegate to resumeJob so steps replay correctly
+        await resumeJob(savedJobId, status);
+    } catch (e) {
+        clearAppState();
     }
 }
 
@@ -156,6 +169,7 @@ function handleSessionChange(session) {
         // Only load fresh UI if explicitly logging in or initial load
         if (!wasLoggedIn) {
             loadHistory();
+            loadInProgressJobs();
             newAnalysis();
         }
     } else {
@@ -432,6 +446,7 @@ async function startAnalysis() {
         wizardSection.style.display = 'none';
         showProgressSection();
         listenToProgress(_currentJobId);
+        loadInProgressJobs(); // show new job in in-progress pane
     } catch (err) {
         showToast('Network error. Please try again.', 'error');
         btn.disabled = false;
@@ -613,7 +628,8 @@ async function loadResults(jobId) {
         
         saveAppState('results', jobId);
         renderResultsView(data.result, jobId);
-        loadHistory(); // refresh sidebar
+        loadHistory();          // refresh completed analyses sidebar
+        loadInProgressJobs();   // remove this job from in-progress pane
     } catch (err) {
         showToast('Failed to load results.', 'error');
     }
@@ -781,6 +797,97 @@ function renderRiskItems(risks) {
     `).join('');
 }
 
+// ── Sidebar: In-Progress Jobs ───────────────────────────────
+
+async function loadInProgressJobs() {
+    try {
+        const res = await authFetch('/api/my-jobs');
+        const data = await res.json();
+        renderInProgressList(data.jobs || []);
+    } catch (e) {
+        console.error("Failed to load in-progress jobs", e);
+    }
+}
+
+function renderInProgressList(jobs) {
+    const el = document.getElementById('inProgressList');
+    const pane = document.getElementById('inProgressPane');
+    if (!el || !pane) return;
+
+    if (!jobs.length) {
+        pane.style.display = 'none';
+        return;
+    }
+
+    const STATUS_LABEL = {
+        pending:             'Starting...',
+        running:             'Analyzing...',
+        awaiting_projection: 'Awaiting Projections',
+        waiting_for_user:    'Awaiting Validation',
+        resuming:            'Resuming...',
+    };
+
+    pane.style.display = 'flex';
+    el.innerHTML = jobs.map(job => {
+        const company = job.company_name
+            || (Array.isArray(job.filenames) && job.filenames[0])
+            || 'Unknown';
+        const date = new Date(job.created_at).toLocaleDateString('en-US', {
+            month: 'short', day: 'numeric'
+        });
+        const label = STATUS_LABEL[job.status] || job.status;
+        return `
+        <div class="inprogress-item" id="inprogress-${job.job_id}">
+            <div class="inprogress-info">
+                <div class="inprogress-company" title="${company}">${company}</div>
+                <div class="inprogress-meta">
+                    <span class="inprogress-status">${label}</span>
+                    <span class="inprogress-date">${date}</span>
+                </div>
+            </div>
+            <button class="btn-resume" onclick="resumeJob('${job.job_id}', '${job.status}')">Resume →</button>
+        </div>`;
+    }).join('');
+}
+
+async function resumeJob(jobId, status) {
+    _currentJobId = jobId;
+    saveAppState('progress', jobId);
+
+    wizardSection.style.display = 'none';
+    progressSection.style.display = 'block';
+    resultsSection.style.display = 'none';
+
+    showProgressSection();
+
+    try {
+        // Fetch current job state to replay already-completed steps
+        const res = await authFetch(`/api/result/${jobId}`);
+        const data = await res.json();
+
+        // Replay all persisted progress events so steps show correct state
+        (data.progress || []).forEach(p => {
+            if (p.step && p.step !== 'error') updateStep(p.step, p.message, p.done);
+        });
+
+        // Route to the exact stage the job is waiting at
+        const currentStatus = data.status || status;
+        if (currentStatus === 'awaiting_projection') {
+            showProjectionUploadView(jobId);
+        } else if (currentStatus === 'waiting_for_user') {
+            showValidationSplitView(jobId);
+        } else if (currentStatus === 'completed') {
+            loadResults(jobId);
+        } else {
+            // running / resuming / pending — connect to SSE stream
+            listenToProgress(jobId);
+        }
+    } catch (e) {
+        showToast('Failed to resume job. Please try again.', 'error');
+    }
+}
+window.resumeJob = resumeJob;
+
 // ── Sidebar History ─────────────────────────────────────────
 
 async function loadHistory() {
@@ -945,6 +1052,7 @@ async function saveReport(jobId) {
             showToast('Analysis saved to your history!', 'success');
             if (btn) { btn.textContent = '✓ Saved'; }
             loadHistory();
+            loadInProgressJobs();
         } else {
             showToast(data.error || 'Failed to save.', 'error');
             if (btn) { btn.disabled = false; btn.textContent = '💾 Save to History'; }

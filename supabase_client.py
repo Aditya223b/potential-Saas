@@ -94,6 +94,28 @@ def delete_job(job_id: str) -> bool:
         return False
 
 
+def get_user_jobs(user_id: str) -> list[dict]:
+    """
+    Fetch all in-progress jobs for a user — statuses that indicate work
+    is still underway (not completed or failed).
+    Returns lightweight rows (no heavy blobs like extracted_financials).
+    """
+    try:
+        result = (
+            _get_admin_client().table("jobs")
+            .select("job_id, user_id, status, company_name, filenames, created_at")
+            .eq("user_id", user_id)
+            .in_("status", ["pending", "running", "awaiting_projection", "waiting_for_user", "resuming"])
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        print(f"⚠️  get_user_jobs failed: {e}")
+        return []
+
+
 def verify_user_token(token: str) -> dict | None:
     """
     Verify a Supabase JWT access token and return the user info.

@@ -7,6 +7,7 @@ and generates investment recommendations.
 import json
 import re
 import time
+import concurrent.futures
 from google import genai
 from google.genai import errors as genai_errors
 from config import GEMINI_API_KEY
@@ -15,6 +16,7 @@ from config import GEMINI_API_KEY
 _client = genai.Client(api_key=GEMINI_API_KEY)
 _MODEL_PRIMARY = "gemini-2.5-pro"
 _MODEL_FALLBACK = "gemini-2.5-flash"
+_GENERATE_TIMEOUT = 300  # seconds — hard cap per Gemini call to prevent indefinite hangs
 
 
 def _generate_with_files(prompt: str, file_refs: list[str]) -> str:
@@ -35,7 +37,19 @@ def _generate_with_files(prompt: str, file_refs: list[str]) -> str:
     for model in models:
         for attempt in range(3):
             try:
-                response = _client.models.generate_content(model=model, contents=contents)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        _client.models.generate_content,
+                        model=model,
+                        contents=contents,
+                    )
+                    try:
+                        response = future.result(timeout=_GENERATE_TIMEOUT)
+                    except concurrent.futures.TimeoutError:
+                        if model == _MODEL_PRIMARY:
+                            print(f"   ⚠️  {model} timed out after {_GENERATE_TIMEOUT}s, falling back to {_MODEL_FALLBACK}...")
+                            break  # try fallback model
+                        raise RuntimeError(f"Gemini {model} timed out after {_GENERATE_TIMEOUT}s")
                 return response.text
             except (genai_errors.ServerError, genai_errors.ClientError) as e:
                 err_str = str(e)

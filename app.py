@@ -953,6 +953,15 @@ def rate_limit_status():
 # ── User Analysis History (Supabase) ─────────────────────────────────────────
 
 
+@app.route("/api/my-jobs")
+@require_auth
+def my_jobs():
+    """List all in-progress (non-completed) jobs for the authenticated user."""
+    from supabase_client import get_user_jobs
+    jobs = get_user_jobs(g.user["id"])
+    return jsonify({"jobs": jobs})
+
+
 @app.route("/api/my-analyses")
 @require_auth
 def my_analyses():

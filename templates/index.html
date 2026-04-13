@@ -7,7 +7,7 @@
     <meta name="description" content="AI-powered financial statement analysis with user profiles and history.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=11">
+    <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
 
@@ -58,6 +58,17 @@
                 🏠
                 <span class="nav-label">Home</span>
             </button>
+        </div>
+
+        <!-- In-Progress Analyses -->
+        <div class="history-pane in-progress-pane" id="inProgressPane" style="flex:0;padding-bottom:0;">
+            <h4 class="in-progress-heading">
+                <span class="in-progress-dot"></span>
+                In Progress
+            </h4>
+            <div id="inProgressList" class="sidebar-list in-progress-list">
+                <!-- Injected by JS -->
+            </div>
         </div>
 
         <div class="history-pane" id="historyPane">
@@ -368,7 +379,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for Excel formatting -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-<script src="/static/app.js?v=4"></script>
+<script src="/static/app.js?v=5"></script>
 
 </body>
 </html>
