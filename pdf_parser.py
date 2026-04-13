@@ -9,9 +9,27 @@ import re
 import time
 
 
+_MIME_MAP = {
+    ".pdf":  "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls":  "application/vnd.ms-excel",
+    ".csv":  "text/csv",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc":  "application/msword",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".ppt":  "application/vnd.ms-powerpoint",
+    ".txt":  "text/plain",
+    ".png":  "image/png",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif":  "image/gif",
+}
+
+
 def _upload_to_gemini(filepath: str, max_retries: int = 3) -> str:
     """
-    Uploads a PDF securely to Gemini's internal structured File API.
+    Uploads a file to Gemini's File API with explicit MIME type resolution.
     Returns the file reference (e.g. 'files/abcdef123').
     Includes retry logic for cloud deployment resilience.
     """
@@ -20,11 +38,13 @@ def _upload_to_gemini(filepath: str, max_retries: int = 3) -> str:
 
     client = genai.Client(api_key=GEMINI_API_KEY)
     basename = os.path.basename(filepath)
-    print(f"  📤 Uploading {basename} to Gemini File API...")
+    ext = os.path.splitext(basename)[1].lower()
+    mime_type = _MIME_MAP.get(ext, "application/octet-stream")
+    print(f"  📤 Uploading {basename} ({mime_type}) to Gemini File API...")
 
     for attempt in range(max_retries):
         try:
-            uploaded_file = client.files.upload(file=filepath)
+            uploaded_file = client.files.upload(file=filepath, config={"mime_type": mime_type})
 
             # Wait until processing is complete (with timeout)
             wait_start = time.time()
