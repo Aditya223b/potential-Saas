@@ -7,7 +7,7 @@
     <meta name="description" content="AI-powered financial statement analysis with user profiles and history.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=10">
+    <link rel="stylesheet" href="/static/style.css?v=11">
 </head>
 <body>
 
@@ -82,6 +82,16 @@
         <header class="main-header">
             <div class="header-actions">
                 <span class="header-badge">POWERED BY GEMINI 2.5 PRO</span>
+
+                <!-- Theme Toggle -->
+                <div class="theme-toggle-wrap" onclick="toggleTheme()" title="Toggle light / dark mode">
+                    <span class="theme-toggle-icon theme-icon-sun">☀</span>
+                    <div class="theme-toggle-track" id="themeToggleBtn">
+                        <div class="theme-toggle-thumb"></div>
+                    </div>
+                    <span class="theme-toggle-icon theme-icon-moon">🌙</span>
+                </div>
+
                 <div class="user-menu">
                     <span id="userEmail" class="user-email"></span>
                     <button class="btn btn-sm btn-ghost" onclick="logout()">Logout</button>
@@ -358,7 +368,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for Excel formatting -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-<script src="/static/app.js?v=3"></script>
+<script src="/static/app.js?v=4"></script>
 
 </body>
 </html>

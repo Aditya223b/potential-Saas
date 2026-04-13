@@ -45,21 +45,15 @@ const historyList = document.getElementById('historyList');
 
 // ── Initialization ──────────────────────────────────────────
 window.onload = async () => {
-    // Init Theme
-    let currentTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', currentTheme);
-    const themeBtn = document.getElementById('themeToggleBtn');
-    if (themeBtn) {
-        themeBtn.innerHTML = currentTheme === 'light' 
-            ? '🌙\n                <span class="nav-label">Theme</span>' 
-            : '☀️\n                <span class="nav-label">Theme</span>';
-    }
+    // Init Theme — CSS handles all visual state via data-theme attribute
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
 
     // Init Supabase
     _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // Check existing session
-    const { data, error } = await _supabase.auth.getSession();
+    const { data } = await _supabase.auth.getSession();
     if (data.session) {
         handleSessionChange(data.session);
     } else {
@@ -111,17 +105,11 @@ async function rehydrateState() {
 
 // ── Theme & Layout ──────────────────────────────────────────
 window.toggleTheme = function() {
-    let currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', currentTheme);
-    localStorage.setItem('theme', currentTheme);
-    
-    // Update button icon
-    const btn = document.getElementById('themeToggleBtn');
-    if (btn) {
-        btn.innerHTML = currentTheme === 'light' 
-            ? '🌙\n                <span class="nav-label">Theme</span>' 
-            : '☀️\n                <span class="nav-label">Theme</span>';
-    }
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    // All visual changes are CSS-driven via data-theme attribute
 };
 
 window.toggleHistory = function() {
@@ -637,7 +625,6 @@ function renderResultsView(result, jobId, isHistorical = false) {
     const bg = result.company_background || {};
     const fin = result.financial_analysis || {};
     const risk = result.risk_analysis || {};
-    const comp = result.competitor_analysis || {};
     const ratios = result.computed_ratios || {};
     
     const verdict = (rec.recommendation || 'N/A').toUpperCase();
@@ -1261,7 +1248,6 @@ function runValidationChecks() {
         stCell.title = '';
         tr.style.backgroundColor = '';
 
-        let checksPassed = true;
         let pErrors = [];
         let warnings = [];
         

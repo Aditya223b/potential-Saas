@@ -1047,6 +1047,405 @@ h1, h2, h3, h4 {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.22); }
 
 /* ── Selection ─────────────────────────────────────────────── */
 ::selection { background: var(--accent-glow); color: var(--text-primary); }
+
+
+/* ════════════════════════════════════════════════════════════
+   APPLE HIG — LIGHT MODE  (data-theme="light")
+   "Premium white space · SF Pro · Cinematic imagery"
+   ════════════════════════════════════════════════════════════ */
+html[data-theme="light"] {
+  /* Surfaces */
+  --bg-primary:       #ffffff;
+  --bg-secondary:     #f5f5f7;
+  --bg-card:          #ffffff;
+  --bg-card-hover:    #f5f5f7;
+
+  /* Text — Apple's exact dark system label colors */
+  --text-primary:     #1d1d1f;
+  --text-secondary:   #6e6e73;
+  --text-muted:       #aeaeb2;
+
+  /* Accent — Apple's macOS / web blue */
+  --accent:           #0071e3;
+  --accent-light:     #147ce5;
+  --accent-dim:       #0058b0;
+  --accent-glow:      rgba(0, 113, 227, 0.14);
+  --accent-glow-lg:   rgba(0, 113, 227, 0.22);
+
+  /* Borders — Apple uses very subtle separators */
+  --border:           rgba(0, 0, 0, 0.10);
+  --border-subtle:    rgba(0, 0, 0, 0.06);
+  --border-active:    rgba(0, 113, 227, 0.45);
+
+  /* Sidebar */
+  --sidebar-bg:       #f5f5f7;
+  --sidebar-text:     #86868b;
+  --sidebar-active:   rgba(0, 113, 227, 0.08);
+
+  /* Semantic — Apple system colors */
+  --success:          #34c759;
+  --green:            #34c759;
+  --green-bg:         rgba(52, 199, 89, 0.10);
+  --warning:          #ff9f0a;
+  --orange:           #ff9500;
+  --orange-bg:        rgba(255, 149, 0, 0.10);
+  --danger:           #ff3b30;
+  --red:              #ff3b30;
+  --red-bg:           rgba(255, 59, 48, 0.10);
+  --blue:             #0071e3;
+  --blue-bg:          rgba(0, 113, 227, 0.07);
+
+  /* Depth — Apple's signature featherweight shadows */
+  --shadow:           0 1px 0 rgba(0,0,0,0.04), 0 4px 20px rgba(0,0,0,0.06);
+  --shadow-lg:        0 1px 0 rgba(0,0,0,0.04), 0 20px 60px rgba(0,0,0,0.10);
+  --shadow-blue:      0 0 0 1px rgba(0,113,227,0.3), 0 4px 16px rgba(0,113,227,0.14);
+}
+
+/* ── Light mode body base ──────────────────────────────────── */
+html[data-theme="light"] body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
+}
+
+/* ── Light mode headings ───────────────────────────────────── */
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4 {
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+}
+
+/* ── Light mode form inputs ─────────────────────────────────── */
+html[data-theme="light"] .form-group input,
+html[data-theme="light"] .form-group textarea {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.12);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) inset;
+}
+html[data-theme="light"] .form-group input:focus,
+html[data-theme="light"] .form-group textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 1px 2px rgba(0,0,0,0.04) inset;
+  background: #ffffff;
+}
+html[data-theme="light"] .form-input {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.12);
+  color: var(--text-primary);
+}
+
+/* ── Light mode buttons ─────────────────────────────────────── */
+html[data-theme="light"] .btn-primary {
+  box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 4px 16px rgba(0,113,227,0.25);
+}
+html[data-theme="light"] .btn-primary:hover {
+  box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 8px 24px rgba(0,113,227,0.32);
+}
+html[data-theme="light"] .btn-ghost {
+  border-color: rgba(0,0,0,0.15);
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .btn-ghost:hover {
+  background: rgba(0,0,0,0.04);
+  color: var(--text-primary);
+  border-color: rgba(0,0,0,0.2);
+}
+
+/* ── Light mode auth card ──────────────────────────────────── */
+html[data-theme="light"] .auth-screen {
+  background: var(--bg-secondary);
+  background-image: radial-gradient(ellipse 70% 40% at 50% -5%, rgba(0,113,227,0.08) 0%, transparent 70%);
+}
+html[data-theme="light"] .auth-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.04), 0 24px 64px rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .auth-card::before {
+  background: linear-gradient(90deg, transparent, rgba(0,113,227,0.4), transparent);
+}
+html[data-theme="light"] .auth-logo .logo-icon {
+  box-shadow: 0 2px 8px rgba(0,113,227,0.28);
+}
+
+/* ── Light mode sidebar ────────────────────────────────────── */
+html[data-theme="light"] .sidebar {
+  border-right-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .nav-link:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-primary);
+}
+html[data-theme="light"] .sidebar-collapse-btn {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.12);
+}
+html[data-theme="light"] .sidebar-collapse-btn:hover {
+  background: var(--blue-bg);
+  border-color: rgba(0,113,227,0.25);
+  color: var(--accent);
+}
+html[data-theme="light"] .sidebar-search input {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.1);
+}
+html[data-theme="light"] .history-item:hover {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .history-item.active {
+  background: var(--sidebar-active);
+  border-color: rgba(0,113,227,0.2);
+}
+
+/* ── Light mode main content ───────────────────────────────── */
+html[data-theme="light"] .main-content {
+  background: var(--bg-secondary);
+}
+html[data-theme="light"] .main-header {
+  border-bottom-color: rgba(0,0,0,0.07);
+}
+html[data-theme="light"] .header-badge {
+  color: var(--accent);
+  background: var(--blue-bg);
+  border-color: rgba(0,113,227,0.2);
+}
+
+/* ── Light mode wizard ─────────────────────────────────────── */
+html[data-theme="light"] .dropzone {
+  background: #ffffff;
+  border-color: rgba(0,113,227,0.2);
+}
+html[data-theme="light"] .dropzone:hover,
+html[data-theme="light"] .dropzone.dragover {
+  background: #f5f5f7;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+html[data-theme="light"] .dropzone-icon {
+  background: var(--blue-bg);
+  border-color: rgba(0,113,227,0.15);
+}
+html[data-theme="light"] .file-item {
+  background: var(--blue-bg);
+  border-color: rgba(0,113,227,0.12);
+}
+html[data-theme="light"] .option-body {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.1);
+}
+html[data-theme="light"] .option-card:hover .option-body {
+  background: #f5f5f7;
+  border-color: rgba(0,0,0,0.15);
+}
+html[data-theme="light"] .option-card input:checked + .option-body {
+  border-color: var(--accent);
+  background: rgba(0,113,227,0.05);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+html[data-theme="light"] .review-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .review-row { border-bottom-color: rgba(0,0,0,0.06); }
+html[data-theme="light"] .wizard-actions { border-top-color: rgba(0,0,0,0.07); }
+
+/* ── Light mode progress steps ──────────────────────────────── */
+html[data-theme="light"] .progress-step {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .progress-step.active {
+  background: rgba(0,113,227,0.04);
+  border-color: rgba(0,113,227,0.35);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+html[data-theme="light"] .progress-step.done {
+  background: #ffffff;
+  border-color: rgba(52,199,89,0.2);
+}
+html[data-theme="light"] .step-indicator.pending {
+  background: var(--bg-secondary);
+  border-color: rgba(0,0,0,0.1);
+}
+html[data-theme="light"] .step-clickable:hover { background: rgba(0,0,0,0.03); }
+html[data-theme="light"] .step-clickable.step-selected {
+  background: rgba(0,113,227,0.05);
+  outline-color: rgba(0,113,227,0.25);
+}
+html[data-theme="light"] .step-detail-panel {
+  border-color: rgba(0,113,227,0.2);
+  background: rgba(0,113,227,0.03);
+  box-shadow: 0 0 0 3px rgba(0,113,227,0.05), var(--shadow);
+}
+html[data-theme="light"] .step-detail-header {
+  background: rgba(0,113,227,0.04);
+  border-bottom-color: rgba(0,113,227,0.1);
+}
+
+/* ── Light mode results ─────────────────────────────────────── */
+html[data-theme="light"] .section-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .section-card:hover { border-color: rgba(0,0,0,0.13); }
+html[data-theme="light"] .verdict-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .info-item {
+  background: var(--bg-secondary);
+  border-color: rgba(0,0,0,0.06);
+}
+html[data-theme="light"] .risk-item { background: #f5f5f7; }
+html[data-theme="light"] .risk-mitigation {
+  background: rgba(0,0,0,0.03);
+  border-left-color: rgba(0,0,0,0.1);
+}
+html[data-theme="light"] .bullet-list li::before { background: var(--accent); }
+
+/* ── Light mode tables ──────────────────────────────────────── */
+html[data-theme="light"] .excel-table-container {
+  border-color: rgba(0,0,0,0.08);
+  background: #ffffff;
+}
+html[data-theme="light"] .excel-table th { background: var(--bg-secondary); }
+html[data-theme="light"] .excel-table th,
+html[data-theme="light"] .excel-table td { border-color: rgba(0,0,0,0.06); }
+html[data-theme="light"] .excel-table tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+html[data-theme="light"] .excel-table tr:hover td { background: rgba(0,113,227,0.04) !important; }
+
+/* ── Light mode validation pane ─────────────────────────────── */
+html[data-theme="light"] .validation-right-pane {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+html[data-theme="light"] .projection-upload-card {
+  background: var(--bg-secondary);
+  border-color: rgba(0,113,227,0.2);
+}
+html[data-theme="light"] .source-btn {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.1);
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .source-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Light mode modals ──────────────────────────────────────── */
+html[data-theme="light"] .modal-overlay { background: rgba(0,0,0,0.45); }
+html[data-theme="light"] .modal {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.04), 0 32px 80px rgba(0,0,0,0.14);
+}
+html[data-theme="light"] .modal::before {
+  background: linear-gradient(90deg, transparent, rgba(0,113,227,0.35), transparent);
+}
+html[data-theme="light"] .source-image-container {
+  background: var(--bg-secondary);
+  border-color: rgba(0,0,0,0.08);
+}
+
+/* ── Light mode toasts ──────────────────────────────────────── */
+html[data-theme="light"] .toast.success {
+  background: rgba(52,199,89,0.12);
+  color: #1a8c3a;
+  border-color: rgba(52,199,89,0.25);
+  box-shadow: 0 4px 20px rgba(52,199,89,0.12);
+}
+html[data-theme="light"] .toast.error {
+  background: rgba(255,59,48,0.10);
+  color: #cc1a12;
+  border-color: rgba(255,59,48,0.22);
+  box-shadow: 0 4px 20px rgba(255,59,48,0.10);
+}
+
+/* ── Light mode spinner / pulse ─────────────────────────────── */
+html[data-theme="light"] .spinner {
+  border-color: rgba(0,113,227,0.2);
+  border-top-color: var(--accent);
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   THEME TOGGLE PILL — Modern Sun / Moon Switcher
+   ════════════════════════════════════════════════════════════ */
+.theme-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 6px;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+.theme-toggle-wrap:hover { background: rgba(128,128,128,0.08); }
+
+.theme-toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: opacity 0.25s;
+}
+.theme-icon-sun  { opacity: 0.5; }
+.theme-icon-moon { opacity: 0.5; }
+
+/* In light mode: sun is active */
+html[data-theme="light"] .theme-icon-sun  { opacity: 1; }
+html[data-theme="light"] .theme-icon-moon { opacity: 0.4; }
+
+/* In dark mode: moon is active */
+html[data-theme="dark"] .theme-icon-sun  { opacity: 0.4; }
+html[data-theme="dark"] .theme-icon-moon { opacity: 1; }
+
+.theme-toggle-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.25);
+  border: 1px solid rgba(120, 120, 128, 0.18);
+  transition: background 0.3s ease, border-color 0.3s ease;
+  flex-shrink: 0;
+}
+
+html[data-theme="dark"] .theme-toggle-track {
+  background: var(--accent);
+  border-color: rgba(0,102,255,0.4);
+}
+html[data-theme="light"] .theme-toggle-track {
+  background: rgba(120, 120, 128, 0.22);
+  border-color: rgba(0,0,0,0.1);
+}
+
+.theme-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+html[data-theme="dark"] .theme-toggle-thumb {
+  transform: translateX(18px);
+  background: #ffffff;
+}
+html[data-theme="light"] .theme-toggle-thumb {
+  transform: translateX(0px);
+  background: #ffffff;
+}
