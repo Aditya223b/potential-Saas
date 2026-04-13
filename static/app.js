@@ -466,6 +466,7 @@ const STEP_CONFIG = {
     background: { label: 'Company Background Analysis', icon: '🏢' },
     competitors: { label: 'Competitor Analysis', icon: '⚔️' },
     ratios: { label: 'Calculating Financial Ratios', icon: '📊' },
+    projection_analysis: { label: 'Reviewing Management Projections', icon: '📈' },
     financial: { label: 'Deep Financial Analysis', icon: '📈' },
     risks: { label: 'Risk Assessment', icon: '⚠️' },
     recommendation: { label: 'Investment Recommendation', icon: '💡' },
@@ -707,6 +708,100 @@ function renderResultsView(result, jobId, isHistorical = false) {
         <h3><span class="icon">📊</span> Financial Ratios</h3>
         ${renderRatioTables(ratios)}
     </div>`;
+
+    // Projection Analysis (only shown if projections were uploaded and analysed)
+    const proj = result.projection_analysis || {};
+    if (proj.review_table && proj.review_table.length) {
+        const credibilityColor = {
+            'Optimistic': 'badge-red',
+            'Realistic':  'badge-green',
+            'Conservative': 'badge-blue',
+            'Mixed': 'badge-orange',
+        };
+        html += `
+    <div class="section-card">
+        <h3><span class="icon">📈</span> Management Projection Review</h3>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <span class="badge ${credibilityColor[proj.overall_credibility] || 'badge-orange'}">
+                Overall: ${proj.overall_credibility || 'N/A'}
+            </span>
+            ${proj.projection_period ? `<span style="font-size:12px;color:var(--text-muted)">Period: ${proj.projection_period}</span>` : ''}
+        </div>
+        ${proj.overall_credibility_summary ? `<p class="summary-text" style="margin-bottom:16px">${proj.overall_credibility_summary}</p>` : ''}
+
+        <!-- Assumptions -->
+        ${proj.management_assumptions && proj.management_assumptions.length ? `
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Management Assumptions</h4>
+        <ul class="bullet-list" style="margin-bottom:20px">
+            ${proj.management_assumptions.map(a => `<li>${a}</li>`).join('')}
+        </ul>` : ''}
+
+        <!-- Review Table -->
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Projection Review</h4>
+        <div class="excel-table-container" style="margin-bottom:24px">
+            <table class="excel-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Management Projection</th>
+                        <th>Historical Baseline</th>
+                        <th>Credibility</th>
+                        <th>Rationale</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${proj.review_table.map(row => {
+                        const cClass = row.credibility === 'Realistic' ? 'status-pass' : row.credibility === 'Optimistic' ? 'status-fail' : 'status-caution';
+                        const flagIcon = row.risk_flag ? ' ⚠️' : '';
+                        return `<tr>
+                            <td style="font-weight:600">${row.metric}${flagIcon}</td>
+                            <td>${row.management_projection || '—'}</td>
+                            <td style="color:var(--text-muted)">${row.historical_baseline || '—'}</td>
+                            <td class="${cClass}">${row.credibility || '—'}</td>
+                            <td style="font-size:12px;color:var(--text-secondary)">${row.credibility_reason || '—'}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Key Concerns -->
+        ${proj.key_concerns && proj.key_concerns.length ? `
+        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Key Concerns</h4>
+        <ul class="bullet-list" style="margin-bottom:20px">
+            ${proj.key_concerns.map(c => `<li style="color:var(--danger)">${c}</li>`).join('')}
+        </ul>` : ''}
+
+        <!-- AI Counter-Projection -->
+        ${proj.ai_counter_projection ? (() => {
+            const cp = proj.ai_counter_projection;
+            return `
+        <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px">
+            <h4 style="font-size:14px;font-weight:700;margin-bottom:6px">🤖 AI Counter-Projection</h4>
+            ${cp.methodology ? `<p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${cp.methodology}</p>` : ''}
+            ${cp.projections && cp.projections.length ? `
+            <div class="excel-table-container" style="margin-bottom:16px">
+                <table class="excel-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            ${cp.projections[0].year_by_year ? cp.projections[0].year_by_year.map(y => `<th>${y.year}</th>`).join('') : ''}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${cp.projections.map(p => `
+                        <tr>
+                            <td style="font-weight:600">${p.metric}</td>
+                            ${(p.year_by_year || []).map(y => `<td title="${y.reasoning || ''}">${y.value || '—'}</td>`).join('')}
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>` : ''}
+            ${cp.summary ? `<p class="summary-text">${cp.summary}</p>` : ''}
+        </div>`;
+        })() : ''}
+    </div>`;
+    }
 
     // Risk Factors
     html += `

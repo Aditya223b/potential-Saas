@@ -406,6 +406,88 @@ Provide at least 5 risk factors and 5 investment pros. Return ONLY the JSON.
     return _parse_json_response(_generate(prompt))
 
 
+def analyze_projections(
+    company_name: str,
+    projection_files: list[str],
+    historical_financials: dict,
+    computed_ratios: dict,
+    growth_metrics: dict,
+) -> dict:
+    """
+    Analyse management-provided projection files against historical financials.
+    Returns a structured review table and an AI-generated counter-projection.
+
+    projection_files: Gemini file refs that are tagged as management projections.
+    If no projection files are supplied, returns an empty dict so the caller can
+    skip the step gracefully.
+    """
+    if not projection_files:
+        return {}
+
+    hist_json = json.dumps(historical_financials, indent=2, default=str)[:4000]
+    ratios_json = json.dumps(computed_ratios, indent=2, default=str)[:2000]
+    growth_json = json.dumps(growth_metrics, indent=2, default=str)[:1000]
+
+    prompt = f"""You are a senior financial analyst at a top-tier investment firm.
+You have been given the MANAGEMENT PROJECTION documents (attached files) for {company_name}.
+Your job is to critically review these projections against the company's HISTORICAL FINANCIAL PERFORMANCE
+and produce both a projection review table and an independent AI counter-projection.
+
+=== HISTORICAL FINANCIALS ===
+{hist_json}
+
+=== CALCULATED RATIOS ===
+{ratios_json}
+
+=== GROWTH METRICS ===
+{growth_json}
+
+INSTRUCTIONS:
+1. Extract every key metric from the management projection files (revenue, EBITDA, net profit, margins, capex, headcount, etc.)
+2. For each metric, compare it to the historical trend and assess credibility.
+3. Generate your own independent AI counter-projection for the same metrics.
+4. Be specific — use actual numbers from the documents, not generalisations.
+
+Return a JSON object with this exact structure:
+{{
+    "projection_period": "e.g. FY2025-FY2027 — extracted from the documents",
+    "management_assumptions": ["Assumption 1 extracted from docs", "Assumption 2", ...],
+    "review_table": [
+        {{
+            "metric": "Revenue",
+            "management_projection": "e.g. INR 250 Cr by FY2026",
+            "historical_baseline": "e.g. INR 180 Cr in FY2024 (CAGR 18%)",
+            "credibility": "Optimistic | Realistic | Conservative",
+            "credibility_reason": "1-2 sentence justification based on historical trend",
+            "risk_flag": true or false
+        }}
+    ],
+    "overall_credibility": "Optimistic | Realistic | Conservative | Mixed",
+    "overall_credibility_summary": "3-4 sentence overall assessment of the management projections",
+    "key_concerns": ["Concern about a specific projection metric", ...],
+    "ai_counter_projection": {{
+        "methodology": "Brief description of how you derived the counter-projection",
+        "projections": [
+            {{
+                "metric": "Revenue",
+                "year_by_year": [
+                    {{"year": "FY2025", "value": "INR 195 Cr", "reasoning": "Based on trailing 18% CAGR"}},
+                    {{"year": "FY2026", "value": "INR 230 Cr", "reasoning": "..."}}
+                ]
+            }}
+        ],
+        "summary": "3-4 sentence summary comparing AI counter-projection to management projections"
+    }}
+}}
+
+Be rigorous and data-driven. Use numbers from the documents wherever possible.
+Return ONLY the JSON — no markdown, no preamble.
+"""
+
+    raw = _generate_with_files(prompt, projection_files)
+    return _parse_json_response(raw)
+
+
 def generate_recommendation(
     company_name: str,
     financial_analysis: dict,

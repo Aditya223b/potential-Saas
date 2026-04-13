@@ -487,6 +487,29 @@ def run_downstream_pipeline(job: AnalysisJob):
             growth_msg = f" | Revenue growth: {growth_metrics.get('revenue_growth', 'N/A')}"
         job.add_progress("ratios", f"✅ Ratios calculated for {len(years)} year(s){growth_msg}", done=True)
 
+        # Step 8b: Projection analysis (only when management projections were uploaded)
+        projection_analysis = {}
+        projection_gemini_refs = []
+        if job.projection_filenames:
+            job.add_progress("projection_analysis", "📈 Analysing management projections...")
+            logger.info(f"[{job.job_id}] Step 8b: Projection analysis ({len(job.projection_filenames)} file(s))...")
+            from analyzer import analyze_projections
+            # Projection Gemini refs are the last N entries of gemini_files
+            # (they were appended by upload_projection)
+            n_proj = len(job.projection_filenames)
+            projection_gemini_refs = getattr(job, "gemini_files", [])[-n_proj:] if n_proj else []
+            projection_analysis = analyze_projections(
+                company_name,
+                projection_gemini_refs,
+                financials,
+                computed_ratios,
+                growth_metrics,
+            )
+            if projection_analysis:
+                job.add_progress("projection_analysis", "✅ Projection review complete", done=True)
+            else:
+                job.add_progress("projection_analysis", "⚠️ Projection analysis returned no data", done=True)
+
         # Step 9: Financial analysis
         job.add_progress("financial", "🤖 Deep financial analysis...")
         from analyzer import analyze_financials
@@ -520,6 +543,7 @@ def run_downstream_pipeline(job: AnalysisJob):
             "company_background": background,
             "competitor_analysis": competitors,
             "financial_analysis": financial_analysis,
+            "projection_analysis": projection_analysis,
             "risk_analysis": risk_analysis,
             "recommendation": recommendation,
         }
