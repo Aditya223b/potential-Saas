@@ -338,8 +338,7 @@ function addFiles(files) {
 
 function addProjectionFiles(files) {
     files.forEach(f => {
-        const valid = /\.(pdf|xlsx|xls)$/i.test(f.name);
-        if (valid && !selectedProjectionFiles.find(sf => sf.name === f.name)) {
+        if (!selectedProjectionFiles.find(sf => sf.name === f.name)) {
             selectedProjectionFiles.push(f);
         }
     });

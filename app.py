@@ -53,6 +53,15 @@ os.makedirs(app.config["REPORTS_FOLDER"], exist_ok=True)
 redis_conn = redis.from_url(REDIS_URL, decode_responses=True)
 q = Queue("financial_analyzer", connection=redis.from_url(REDIS_URL))
 
+# Disable RDB disk snapshots — job/session data is ephemeral.
+# Prevents stop-writes-on-bgsave-error from blocking all Redis writes
+# when the Railway volume can't persist snapshots to disk.
+try:
+    redis_conn.config_set('save', '')
+    redis_conn.config_set('stop-writes-on-bgsave-error', 'no')
+except Exception:
+    pass  # non-fatal; managed Redis may restrict CONFIG SET
+
 
 def _truncate_words(text: str, max_words: int = 300) -> str:
     words = (text or "").split()
@@ -685,8 +694,7 @@ def upload_projection(job_id):
 
         for uploaded in files:
             filename = uploaded.filename or ""
-            lower_name = filename.lower()
-            if not lower_name.endswith((".pdf", ".xlsx", ".xls")):
+            if not filename:
                 continue
 
             safe_name = f"{job.job_id}_projection_{filename}"
