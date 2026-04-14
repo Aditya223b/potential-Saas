@@ -527,21 +527,24 @@ h1, h2, h3, h4 {
 .history-date { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
 .history-badges { display: flex; gap: 6px; }
 
-/* Kebab (⋮) button */
+/* Kebab (⋮) button — always visible */
 .history-kebab {
   position: absolute;
   right: 6px; top: 50%; transform: translateY(-50%);
-  width: 24px; height: 24px;
+  width: 26px; height: 26px;
   display: flex; align-items: center; justify-content: center;
   background: transparent;
   border: none;
   border-radius: 6px;
   color: var(--text-muted);
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 700;
   cursor: pointer;
   transition: var(--transition-fast);
-  opacity: 0;
+  opacity: 0.6;
   z-index: 2;
+  line-height: 1;
+  letter-spacing: 1px;
 }
 .history-item:hover .history-kebab,
 .history-kebab.open { opacity: 1; }

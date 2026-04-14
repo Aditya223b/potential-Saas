@@ -1138,27 +1138,33 @@ document.addEventListener('click', (e) => {
 
 async function historyDelete(id) {
     closeAllHistoryMenus();
-    const el = document.getElementById(`hist-${id}`);
-    if (el) {
-        el.style.transition = 'opacity 0.25s ease, max-height 0.35s ease, margin 0.35s ease';
-        el.style.opacity = '0';
-        el.style.maxHeight = el.offsetHeight + 'px';
-        requestAnimationFrame(() => {
-            el.style.maxHeight = '0';
-            el.style.marginBottom = '0';
-            el.style.overflow = 'hidden';
-            el.style.padding = '0 12px';
-            el.style.border = 'none';
-        });
-        setTimeout(() => el.remove(), 380);
-    }
     try {
-        await authFetch(`/api/my-analyses/${id}`, { method: 'DELETE' });
+        const res = await authFetch(`/api/my-analyses/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || 'Failed to delete.', 'error');
+            return;
+        }
+        // Success — animate removal
+        const el = document.getElementById(`hist-${id}`);
+        if (el) {
+            el.style.transition = 'opacity 0.25s ease, max-height 0.35s ease, margin 0.35s ease';
+            el.style.opacity = '0';
+            el.style.maxHeight = el.offsetHeight + 'px';
+            requestAnimationFrame(() => {
+                el.style.maxHeight = '0';
+                el.style.marginBottom = '0';
+                el.style.overflow = 'hidden';
+                el.style.padding = '0 12px';
+                el.style.border = 'none';
+            });
+            setTimeout(() => el.remove(), 380);
+        }
         historyAnalyses = historyAnalyses.filter(a => a.id !== id);
         showToast('Moved to Bin. You can restore it anytime.', 'info');
         loadBin();
     } catch (e) {
-        showToast('Failed to delete.', 'error');
+        showToast('Network error while deleting.', 'error');
     }
 }
 window.historyDelete = historyDelete;
@@ -1201,6 +1207,110 @@ async function openHistoricalAnalysis(id, el) {
     }
 }
 window.openHistoricalAnalysis = openHistoricalAnalysis;
+
+// ── Bin Module ──────────────────────────────────────────────
+let _binOpen = false;
+let _binItems = [];
+
+window.toggleBinPane = function() {
+    _binOpen = !_binOpen;
+    const list = document.getElementById('binList');
+    const icon = document.getElementById('binToggleIcon');
+    if (list) list.style.display = _binOpen ? 'block' : 'none';
+    if (icon) icon.classList.toggle('open', _binOpen);
+    if (_binOpen) loadBin();
+};
+
+async function loadBin() {
+    try {
+        const res = await authFetch('/api/bin');
+        if (!res.ok) return;
+        const data = await res.json();
+        _binItems = data.analyses || [];
+        renderBin(_binItems);
+        // Update count badge
+        const badge = document.getElementById('binCountBadge');
+        if (badge) {
+            if (_binItems.length > 0) {
+                badge.textContent = _binItems.length;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load bin', e);
+    }
+}
+
+function renderBin(items) {
+    const list = document.getElementById('binList');
+    if (!list) return;
+    if (!items.length) {
+        list.innerHTML = `<div class="sidebar-empty" style="font-size:12px;padding:8px 0">Bin is empty.</div>`;
+        return;
+    }
+    list.innerHTML = items.map(item => {
+        const delDate = item.deleted_at
+            ? new Date(item.deleted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : '';
+        return `
+        <div class="bin-item" id="bin-${item.id}">
+            <div class="bin-item-info">
+                <div class="bin-item-name" title="${item.company_name}">${item.company_name}</div>
+                <div class="bin-item-date">Deleted ${delDate}</div>
+            </div>
+            <div class="bin-item-actions">
+                <button class="btn-bin-restore" onclick="restoreFromBin('${item.id}')" title="Restore">↩ Restore</button>
+                <button class="btn-bin-perm-del" onclick="permanentlyDelete('${item.id}')" title="Delete forever">✕</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function restoreFromBin(id) {
+    try {
+        const res = await authFetch(`/api/my-analyses/${id}/restore`, { method: 'POST' });
+        if (!res.ok) {
+            const d = await res.json();
+            showToast(d.error || 'Failed to restore.', 'error');
+            return;
+        }
+        showToast('Analysis restored!', 'success');
+        loadBin();
+        loadHistory();
+    } catch (e) {
+        showToast('Network error restoring.', 'error');
+    }
+}
+window.restoreFromBin = restoreFromBin;
+
+async function permanentlyDelete(id) {
+    if (!confirm('Permanently delete this analysis? This cannot be undone.')) return;
+    const el = document.getElementById(`bin-${id}`);
+    if (el) { el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
+    try {
+        const res = await authFetch(`/api/my-analyses/${id}/permanent`, { method: 'DELETE' });
+        if (!res.ok) {
+            const d = await res.json();
+            showToast(d.error || 'Failed to permanently delete.', 'error');
+            if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
+            return;
+        }
+        showToast('Permanently deleted.', 'info');
+        _binItems = _binItems.filter(a => a.id !== id);
+        renderBin(_binItems);
+        const badge = document.getElementById('binCountBadge');
+        if (badge) {
+            if (_binItems.length > 0) { badge.textContent = _binItems.length; }
+            else { badge.style.display = 'none'; }
+        }
+    } catch (e) {
+        showToast('Network error.', 'error');
+        if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
+    }
+}
+window.permanentlyDelete = permanentlyDelete;
 
 
 // ── Actions (Download / Email) ──────────────────────────────
