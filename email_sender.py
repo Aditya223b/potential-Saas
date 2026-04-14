@@ -22,18 +22,16 @@ def send_report_email(
     """
     Send the financial analysis report as an email attachment.
 
-    Args:
-        to_email:         Recipient email address
-        company_name:     Name of the analyzed company
-        report_path:      Path to the generated DOCX file
-        analysis_summary: Brief summary for the email body
-        recommendation:   The investment recommendation (BUY/HOLD/SELL)
-
     Returns:
-        True if sent successfully, False otherwise.
+        (True, "") on success
+        (False, error_reason_str) on failure
     """
-    # ── Resolve credentials ─────────────────────────────────────────────────
-    smtp_email, smtp_password = get_smtp_credentials()
+    # ── Resolve credentials ──────────────────────────────────────────────────
+    try:
+        smtp_email, smtp_password = get_smtp_credentials()
+    except RuntimeError as cred_err:
+        print(f"  ❌ SMTP not configured: {cred_err}")
+        return False, str(cred_err)
 
     # ── Build email ──────────────────────────────────────────────────────────
     msg = MIMEMultipart()
@@ -117,8 +115,8 @@ def send_report_email(
 
     msg.attach(MIMEText(body_html, "html"))
 
-    # ── Attach DOCX ──────────────────────────────────────────────────────────
-    if os.path.exists(report_path):
+    # ── Attach DOCX (optional — send without if file is missing) ─────────────
+    if report_path and os.path.exists(report_path):
         with open(report_path, "rb") as f:
             attachment = MIMEBase("application", "octet-stream")
             attachment.set_payload(f.read())
@@ -129,26 +127,30 @@ def send_report_email(
             )
             msg.attach(attachment)
     else:
-        print(f"  ⚠️  Report file not found: {report_path}")
-        return False
+        print(f"  ⚠️  Report file not found at '{report_path}' — sending email without DOCX attachment")
 
-    # ── Send ─────────────────────────────────────────────────────────────────
+    # ── Send ──────────────────────────────────────────────────────────────────
     try:
-        print(f"  📧 Connecting to {SMTP_HOST}:{SMTP_PORT}...")
+        print(f"  📧 Connecting to {SMTP_HOST}:{SMTP_PORT} as {smtp_email}...")
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(smtp_email, smtp_password)
             server.send_message(msg)
 
         print(f"  ✅ Email sent successfully to {to_email}")
-        return True
+        return True, ""
 
-    except smtplib.SMTPAuthenticationError:
-        print(f"  ❌ SMTP Authentication failed. Check SMTP_EMAIL and SMTP_APP_PASSWORD in .env")
-        return False
+    except smtplib.SMTPAuthenticationError as e:
+        reason = "SMTP authentication failed. Check SMTP_EMAIL and SMTP_APP_PASSWORD in Railway Variables."
+        print(f"  ❌ {reason} ({e})")
+        return False, reason
     except smtplib.SMTPException as e:
-        print(f"  ❌ SMTP Error: {e}")
-        return False
+        reason = f"SMTP error: {e}"
+        print(f"  ❌ {reason}")
+        return False, reason
     except Exception as e:
-        print(f"  ❌ Failed to send email: {e}")
-        return False
+        reason = f"Email send failed: {e}"
+        print(f"  ❌ {reason}")
+        return False, reason

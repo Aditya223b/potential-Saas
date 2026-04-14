@@ -259,3 +259,19 @@ def delete_analysis(analysis_id: str, user_id: str) -> bool:
     except Exception as e:
         print(f"  ⚠️  Failed to delete analysis: {e}")
         return False
+
+
+def download_report_file(storage_path: str) -> bytes | None:
+    """
+    Download a DOCX report file from Supabase Storage.
+    Returns the raw bytes on success, None on failure.
+    Used by the email endpoint to attach the report across Railway containers.
+    """
+    try:
+        data = _get_admin_client().storage.from_("reports").download(storage_path)
+        print(f"  ✅ Report downloaded from Supabase Storage: {storage_path} ({len(data)} bytes)")
+        return data
+    except Exception as e:
+        print(f"  ⚠️  Failed to download report from Storage: {e}")
+        return None
+

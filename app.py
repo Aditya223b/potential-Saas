@@ -1016,7 +1016,7 @@ def download(job_id):
 
 @app.route("/api/email/<job_id>", methods=["POST"])
 def send_email(job_id):
-    """Send the report via email."""
+    """Send the report via email, attaching the DOCX from Supabase Storage if available."""
     job = get_job_object(job_id)
     if not job or not job.result:
         return jsonify({"error": "Analysis not complete"}), 400
@@ -1026,21 +1026,62 @@ def send_email(job_id):
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
+    # ── Resolve the DOCX path ────────────────────────────────────────────────
+    # On Railway the web server and worker run in separate containers, so
+    # job.report_path (a worker-local path) doesn't exist on the web container.
+    # We download from Supabase Storage instead.
+    import tempfile, shutil
+    tmp_report_path = None
+    report_path_to_use = job.report_path  # may be None or a dead path
+
+    # Try to download from Supabase Storage if the local path is gone
+    if not report_path_to_use or not os.path.exists(report_path_to_use):
+        try:
+            from supabase_client import download_report_file
+            storage_path = None
+            # storage_path is stored in the analysis result metadata or job
+            if hasattr(job, "result") and job.result:
+                storage_path = job.result.get("_report_storage_path")
+            if not storage_path and job.user_id:
+                storage_path = f"{job.user_id}/{job.job_id}.docx"  # conventional path
+
+            if storage_path:
+                report_bytes = download_report_file(storage_path)
+                if report_bytes:
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+                    tmp.write(report_bytes)
+                    tmp.close()
+                    tmp_report_path = tmp.name
+                    report_path_to_use = tmp_report_path
+        except Exception as _dl_err:
+            logger.warning(f"[{job_id}] Could not download report from Storage: {_dl_err}")
+
+    # Still no file — email body only (no attachment)
     from email_sender import send_report_email
     rec = job.result.get("recommendation", {})
     summary = job.result.get("financial_analysis", {}).get("executive_summary", "")
+    company_name = job.result.get("company_name", "Unknown")
 
-    success = send_report_email(
-        to_email=email,
-        company_name=job.result.get("company_name", "Unknown"),
-        report_path=job.report_path,
-        analysis_summary=summary,
-        recommendation=rec.get("recommendation", ""),
-    )
+    try:
+        success, error_reason = send_report_email(
+            to_email=email,
+            company_name=company_name,
+            report_path=report_path_to_use or "",
+            analysis_summary=summary,
+            recommendation=rec.get("recommendation", ""),
+        )
+    finally:
+        # Clean up temp file if we created one
+        if tmp_report_path and os.path.exists(tmp_report_path):
+            try:
+                os.remove(tmp_report_path)
+            except Exception:
+                pass
 
     if success:
         return jsonify({"ok": True, "message": f"Report sent to {email}"})
-    return jsonify({"error": "Failed to send email. Check SMTP settings."}), 500
+    return jsonify({"error": error_reason or "Failed to send email. Check SMTP settings."}), 500
+
 
 
 @app.route("/api/save/<job_id>", methods=["POST"])
