@@ -170,6 +170,7 @@ function handleSessionChange(session) {
         if (!wasLoggedIn) {
             loadHistory();
             loadInProgressJobs();
+            loadBin();   // populate bin count badge
             newAnalysis();
         }
     } else {
@@ -1039,6 +1040,7 @@ async function resumeJob(jobId, status) {
             // running / resuming / pending — connect to SSE stream
             listenToProgress(jobId);
         }
+
     } catch (e) {
         showToast('Failed to resume job. Please try again.', 'error');
     }

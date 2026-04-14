@@ -7,7 +7,7 @@
     <meta name="description" content="AI-powered financial statement analysis with user profiles and history.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=13">
+    <link rel="stylesheet" href="/static/style.css?v=14">
 </head>
 <body>
 
@@ -81,11 +81,24 @@
             </div>
         </div>
 
+        <!-- Bin Pane -->
+        <div class="history-pane bin-pane" id="binPane" style="flex:0 0 auto;overflow-y:visible;">
+            <h4 class="bin-heading" onclick="toggleBinPane()" title="Click to expand/collapse">
+                🗑️ Bin
+                <span class="bin-count-badge" id="binCountBadge" style="display:none"></span>
+                <span class="bin-toggle-icon" id="binToggleIcon">›</span>
+            </h4>
+            <div id="binList" class="sidebar-list bin-list" style="display:none;">
+                <!-- Bin items injected here -->
+            </div>
+        </div>
+
         <!-- Collapse toggle at bottom -->
         <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" onclick="toggleHistory()" title="Toggle Sidebar">
             <span id="collapseIcon">›</span>
         </button>
     </aside>
+
 
     <!-- ═══ MAIN CONTENT ═══ -->
     <main class="main-content">
@@ -379,7 +392,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for Excel formatting -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-<script src="/static/app.js?v=7"></script>
+<script src="/static/app.js?v=8"></script>
 
 </body>
 </html>

@@ -502,18 +502,45 @@ h1, h2, h3, h4 {
 .sidebar-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 .sidebar-search input::placeholder { color: var(--text-muted); }
 
-.sidebar-list { flex: 1; overflow-y: auto; }
-.history-item {
-  padding: 10px 12px;
-  background: transparent;
+.sidebar-list { flex: 1; overflow-y: auto; overflow-x: hidden; }
+
+/* ── Swipe-left history card ─────────────────────────────── */
+.history-item-wrap {
+  position: relative;
+  margin-bottom: 4px;
   border-radius: 10px;
-  margin-bottom: 3px;
-  cursor: pointer;
-  transition: var(--transition-fast);
-  border: 1px solid transparent;
+  overflow: hidden;
 }
-.history-item:hover { background: rgba(255,255,255,0.04); border-color: var(--border); }
+
+/* The red "delete" background revealed on swipe */
+.history-delete-bg {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 64px;
+  background: linear-gradient(135deg, #c0392b, #e74c3c);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: width 0.2s ease;
+}
+.history-delete-bg:hover { background: linear-gradient(135deg, #e74c3c, #ff6b6b); }
+
+.history-item {
+  position: relative;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), background 0.15s;
+  border: 1px solid transparent;
+  user-select: none;
+  will-change: transform;
+}
+.history-item:hover  { background: rgba(255,255,255,0.04); border-color: var(--border); }
 .history-item.active { background: var(--sidebar-active); border-color: rgba(0,102,255,0.2); }
+.history-item.swiped { transform: translateX(-64px); border-color: transparent !important; }
+
 .history-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px; }
 .history-company {
   font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden;
@@ -521,6 +548,67 @@ h1, h2, h3, h4 {
 }
 .history-date { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
 .history-badges { display: flex; gap: 6px; }
+
+/* ── Bin Pane ─────────────────────────────────────────────── */
+.bin-pane { border-top: 1px solid var(--border-subtle); padding-top: 0 !important; margin-top: 4px; }
+.bin-heading {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  padding: 10px 0 6px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-size: 11px; letter-spacing: 1.5px; font-weight: 600;
+  transition: color 0.15s;
+  user-select: none;
+}
+.bin-heading:hover { color: var(--text-secondary); }
+.bin-toggle-icon { margin-left: auto; font-size: 14px; transition: transform 0.2s ease; display: inline-block; }
+.bin-toggle-icon.open { transform: rotate(90deg); }
+
+.bin-count-badge {
+  background: rgba(255,60,60,0.15); color: #ff4444;
+  font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 99px;
+  border: 1px solid rgba(255,60,60,0.25);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.bin-list { overflow: hidden; }
+
+.bin-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255,60,60,0.04);
+  border: 1px solid rgba(255,60,60,0.12);
+  border-radius: 8px;
+  margin-bottom: 5px;
+  transition: var(--transition-fast);
+}
+.bin-item:hover { background: rgba(255,60,60,0.08); }
+.bin-item-info { flex: 1; min-width: 0; }
+.bin-item-name {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
+}
+.bin-item-date { font-size: 10px; color: var(--text-muted); }
+.bin-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.btn-bin-restore {
+  font-size: 11px; padding: 3px 8px; border-radius: 5px;
+  background: rgba(0,208,108,0.1); color: var(--green);
+  border: 1px solid rgba(0,208,108,0.2); cursor: pointer; font-weight: 600;
+  transition: var(--transition-fast); white-space: nowrap;
+}
+.btn-bin-restore:hover { background: rgba(0,208,108,0.2); }
+.btn-bin-perm-del {
+  width: 22px; height: 22px; border-radius: 5px; border: none;
+  background: rgba(255,60,60,0.12); color: #ff4444; font-size: 12px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: var(--transition-fast);
+}
+.btn-bin-perm-del:hover { background: rgba(255,60,60,0.28); color: #ff6b6b; }
+
+
 
 /* ── In-Progress Pane ─────────────────────────────────────── */
 .in-progress-pane { flex: 0 0 auto !important; overflow-y: visible !important; }

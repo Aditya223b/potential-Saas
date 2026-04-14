@@ -1192,12 +1192,44 @@ def my_analysis_detail(analysis_id):
 @app.route("/api/my-analyses/<analysis_id>", methods=["DELETE"])
 @require_auth
 def delete_my_analysis(analysis_id):
-    """Delete an analysis by its Supabase ID."""
+    """Soft-delete (move to Bin). The analysis can still be restored."""
+    from supabase_client import soft_delete_analysis
+    success = soft_delete_analysis(analysis_id, g.user["id"])
+    if success:
+        return jsonify({"ok": True})
+    return jsonify({"error": "Failed to delete"}), 500
+
+
+@app.route("/api/my-analyses/<analysis_id>/restore", methods=["POST"])
+@require_auth
+def restore_my_analysis(analysis_id):
+    """Restore a soft-deleted analysis from the Bin."""
+    from supabase_client import restore_analysis
+    success = restore_analysis(analysis_id, g.user["id"])
+    if success:
+        return jsonify({"ok": True})
+    return jsonify({"error": "Failed to restore"}), 500
+
+
+@app.route("/api/my-analyses/<analysis_id>/permanent", methods=["DELETE"])
+@require_auth
+def permanently_delete_analysis(analysis_id):
+    """Permanently delete an analysis that is already in the Bin."""
     from supabase_client import delete_analysis
     success = delete_analysis(analysis_id, g.user["id"])
     if success:
         return jsonify({"ok": True})
-    return jsonify({"error": "Failed to delete"}), 500
+    return jsonify({"error": "Failed to permanently delete"}), 500
+
+
+@app.route("/api/bin")
+@require_auth
+def bin_analyses():
+    """Return all soft-deleted analyses for the current user (the Bin)."""
+    from supabase_client import get_bin_analyses
+    items = get_bin_analyses(g.user["id"])
+    return jsonify({"analyses": items})
+
 
 
 @app.route("/api/report-url/<analysis_id>")

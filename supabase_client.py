@@ -174,14 +174,14 @@ def save_analysis(
 
 def get_user_analyses(user_id: str, limit: int = 50) -> list[dict]:
     """
-    Fetch all analyses belonging to a user, ordered by most recent first.
-    Returns a lightweight list (no full analysis_data blob to keep it fast).
+    Fetch all ACTIVE (non-deleted) analyses for a user, newest first.
     """
     try:
         result = (
             _get_admin_client().table("analyses")
             .select("id, company_name, job_id, recommendation, confidence, filenames, created_at")
             .eq("user_id", user_id)
+            .eq("is_deleted", False)
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -189,6 +189,52 @@ def get_user_analyses(user_id: str, limit: int = 50) -> list[dict]:
         return result.data or []
     except Exception as e:
         print(f"  ⚠️  Failed to fetch analyses: {e}")
+        return []
+
+
+def soft_delete_analysis(analysis_id: str, user_id: str) -> bool:
+    """Move an analysis to the Bin (soft-delete). It can be restored later."""
+    try:
+        from datetime import timezone
+        import datetime
+        _get_admin_client().table("analyses").update({
+            "is_deleted": True,
+            "deleted_at": datetime.datetime.now(timezone.utc).isoformat(),
+        }).eq("id", analysis_id).eq("user_id", user_id).execute()
+        return True
+    except Exception as e:
+        print(f"  ⚠️  soft_delete_analysis failed: {e}")
+        return False
+
+
+def restore_analysis(analysis_id: str, user_id: str) -> bool:
+    """Restore a soft-deleted analysis from the Bin."""
+    try:
+        _get_admin_client().table("analyses").update({
+            "is_deleted": False,
+            "deleted_at": None,
+        }).eq("id", analysis_id).eq("user_id", user_id).execute()
+        return True
+    except Exception as e:
+        print(f"  ⚠️  restore_analysis failed: {e}")
+        return False
+
+
+def get_bin_analyses(user_id: str, limit: int = 50) -> list[dict]:
+    """Fetch analyses that are in the Bin (soft-deleted), newest first."""
+    try:
+        result = (
+            _get_admin_client().table("analyses")
+            .select("id, company_name, job_id, recommendation, confidence, filenames, created_at, deleted_at")
+            .eq("user_id", user_id)
+            .eq("is_deleted", True)
+            .order("deleted_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        print(f"  ⚠️  get_bin_analyses failed: {e}")
         return []
 
 
