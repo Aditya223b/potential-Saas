@@ -1918,6 +1918,20 @@ function _renderStepData(step, data) {
         </table>`;
     }
 
+    if (step === 'projection_analysis') {
+        const proj = data.result?.projection_analysis || {};
+        if (!proj.review_table) return '<p style="color:var(--text-muted);font-size:13px">Projection review not yet complete.</p>';
+        const credColor = { 'Optimistic': 'var(--danger)', 'Realistic': 'var(--success)', 'Conservative': 'var(--accent-light)', 'Mixed': 'var(--warning)' };
+        return `
+        <table style="width:100%;border-collapse:collapse">
+            ${row('Overall credibility', `<span style="font-weight:700;color:${credColor[proj.overall_credibility]||'var(--text-primary)'}">${proj.overall_credibility || '—'}</span>`)}
+            ${row('Period', proj.projection_period || '—')}
+            ${row('Metrics reviewed', proj.review_table.length)}
+            ${row('Risk flags', proj.review_table.filter(r => r.risk_flag).length)}
+        </table>
+        ${proj.overall_credibility_summary ? `<p style="margin-top:10px;font-size:13px;color:var(--text-secondary);line-height:1.5">${proj.overall_credibility_summary.slice(0,300)}…</p>` : ''}`;
+    }
+
     if (step === 'financial') {
         const fin = data.result?.financial_analysis || {};
         const summary = fin.executive_summary || '';

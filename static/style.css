@@ -1141,13 +1141,16 @@ h1, h2, h3, h4 {
 }
 
 .step-detail-panel {
+  position: sticky;
+  bottom: 0;
   margin-top: 12px;
   border: 1px solid rgba(0,102,255,0.3);
   border-radius: var(--radius);
-  background: rgba(0,102,255,0.04);
-  box-shadow: 0 0 0 4px rgba(0,102,255,0.06), var(--shadow);
+  background: var(--bg-card);
+  box-shadow: 0 -4px 24px rgba(0,102,255,0.12), 0 0 0 4px rgba(0,102,255,0.06);
   animation: fadeSlideIn 0.2s var(--ease-out);
   overflow: hidden;
+  z-index: 10;
 }
 
 @keyframes fadeSlideIn {
