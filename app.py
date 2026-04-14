@@ -906,28 +906,82 @@ def source_preview(job_id):
 
     preview = ((job.source_previews or {}).get(year, {}) or {}).get(field)
     source = ((job.extraction_sources or {}).get(year, {}) or {}).get(field)
-    if not preview and not source:
-        return jsonify({"error": "Source preview not available"}), 404
 
-    image_url = None
+    # Use whichever has data
+    page_number  = int((preview or source or {}).get("page_number") or 1)
+    source_file  = (preview or source or {}).get("source_file", "")
+    excerpt      = (preview or source or {}).get("excerpt", "")
+
+    # ── Try pre-rendered base64 first (fast path) ──────────────────────────
     image_data_url = None
     if preview and preview.get("image_base64"):
         image_data_url = f"data:image/png;base64,{preview['image_base64']}"
-    if preview and preview.get("image_path"):
-        image_url = f"/api/source-image/{job_id}?year={year}&field={field}"
+
+    # ── On-demand fallback: render via Gemini File API ─────────────────────
+    # If the background thread hasn't finished yet (or Redis serialization
+    # stripped the base64), ask Gemini to render the page as a PNG image.
+    # We use the stored Gemini file references for the historical documents.
+    if not image_data_url:
+        try:
+            gemini_files = getattr(job, "gemini_files", [])
+            # Limit to historical files only (projection files are appended last)
+            n_proj = len(getattr(job, "projection_filenames", []))
+            hist_refs = gemini_files[:-n_proj] if n_proj else gemini_files
+
+            if hist_refs:
+                from google import genai as _genai
+                from config import GEMINI_API_KEY
+                _gclient = _genai.Client(api_key=GEMINI_API_KEY)
+
+                # Resolve Gemini file objects
+                file_objs = []
+                for ref in hist_refs:
+                    try:
+                        file_objs.append(_gclient.files.get(name=ref))
+                    except Exception:
+                        pass
+
+                if file_objs:
+                    render_prompt = (
+                        f"Please render page {page_number} of the attached financial document as a clear, "
+                        f"high-resolution image. Focus on the table or section containing: '{excerpt[:120]}'. "
+                        f"Highlight or frame the relevant row or number if possible. "
+                        f"Return only the image, no text."
+                    )
+                    contents = [*file_objs, render_prompt]
+                    response = _gclient.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=contents,
+                        config={"response_modalities": ["IMAGE"]},
+                    )
+                    # Extract image bytes from response parts
+                    for part in (response.candidates[0].content.parts if response.candidates else []):
+                        if hasattr(part, "inline_data") and part.inline_data:
+                            img_b64 = base64.b64encode(part.inline_data.data).decode("ascii")
+                            image_data_url = f"data:{part.inline_data.mime_type};base64,{img_b64}"
+                            # Cache it back so next click is instant
+                            if preview is not None:
+                                preview["image_base64"] = img_b64
+                            break
+        except Exception as _img_err:
+            logger.warning(f"[{job_id}] On-demand image generation failed: {_img_err}")
+
+    if not preview and not source:
+        return jsonify({"error": "Source preview not available"}), 404
 
     return jsonify({
         "year": year,
         "field": field,
         "source": source or {},
         "preview": {
-            "page_number": (preview or {}).get("page_number"),
-            "source_file": (preview or {}).get("source_file"),
-            "excerpt": (preview or {}).get("excerpt"),
+            "page_number": page_number,
+            "source_file": source_file,
+            "excerpt": excerpt,
         },
-        "image_url": image_url,
         "image_data_url": image_data_url,
+        "image_url": None,
     })
+
 
 
 @app.route("/api/source-image/<job_id>")

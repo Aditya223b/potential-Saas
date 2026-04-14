@@ -1634,7 +1634,12 @@ async function openSourceModal(year, field) {
 
     modal.classList.add('active');
     meta.textContent = 'Loading source details...';
-    container.innerHTML = '<div class="spinner"></div>';
+    container.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:32px">
+            <div class="spinner"></div>
+            <p style="font-size:13px;color:var(--text-muted)">Generating page preview from PDF…</p>
+        </div>`;
+
 
     try {
         const res = await authFetch(`/api/source-preview/${_currentValidationJobId}?year=${encodeURIComponent(year)}&field=${encodeURIComponent(field)}`);
@@ -1654,13 +1659,19 @@ async function openSourceModal(year, field) {
             const excerpt = preview.excerpt || source.excerpt || '';
             container.innerHTML = `
                 <div style="width:100%">
-                    <img src="${imageSrc}" alt="Source preview for ${field}">
-                    ${excerpt ? `<p style="margin-top:12px">${excerpt}</p>` : ''}
+                    <img src="${imageSrc}" alt="Source preview for ${field}" style="width:100%;border-radius:6px;border:1px solid var(--border)">
+                    ${excerpt ? `<p style="margin-top:12px;font-size:12px;color:var(--text-muted);background:var(--bg-tertiary);padding:8px 12px;border-radius:6px;font-family:monospace">${excerpt}</p>` : ''}
                 </div>
             `;
         } else {
-            container.innerHTML = `<p>${preview.excerpt || source.excerpt || 'Source image unavailable for this field.'}</p>`;
+            // No image available — show excerpt in a styled box
+            const excerpt = preview.excerpt || source.excerpt || '';
+            container.innerHTML = excerpt
+                ? `<div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:monospace;font-size:13px;color:var(--text-primary);line-height:1.6">${excerpt}</div>
+                   <p style="margin-top:10px;font-size:12px;color:var(--text-muted)">⚠️ PDF image preview unavailable — showing extracted text excerpt instead.</p>`
+                : `<p style="color:var(--text-muted)">Source image and excerpt unavailable for this field.</p>`;
         }
+
     } catch (err) {
         meta.textContent = 'Failed to load source preview.';
         container.innerHTML = '';
