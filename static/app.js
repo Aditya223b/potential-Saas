@@ -1077,9 +1077,9 @@ function renderHistoryList(items) {
         const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const v = (item.recommendation || '').toUpperCase();
         const vClass = v === 'BUY' ? 'buy' : v === 'HOLD' ? 'hold' : 'avoid';
-        
+
         return `
-        <div class="history-item" onclick="openHistoricalAnalysis('${item.id}', this)">
+        <div class="history-item" id="hist-${item.id}" onclick="openHistoricalAnalysis('${item.id}', this)">
             <div class="history-item-top">
                 <div class="history-company" title="${item.company_name}">${item.company_name}</div>
                 <div class="history-date">${date}</div>
@@ -1087,11 +1087,98 @@ function renderHistoryList(items) {
             <div class="history-badges">
                 <span class="h-badge ${vClass}">${v.length > 10 ? v.substring(0,8)+'...' : v}</span>
             </div>
+            <!-- 3-dot kebab button -->
+            <button class="history-kebab" onclick="event.stopPropagation(); toggleHistoryMenu('${item.id}')" title="Options">⋮</button>
+            <!-- Dropdown -->
+            <div class="history-menu" id="menu-${item.id}">
+                <button class="history-menu-item" onclick="event.stopPropagation(); historyDownload('${item.id}')">
+                    <span class="history-menu-icon">📥</span> Download
+                </button>
+                <button class="history-menu-item" onclick="event.stopPropagation(); historyEmail('${item.id}')">
+                    <span class="history-menu-icon">✉️</span> Share via Email
+                </button>
+                <button class="history-menu-item danger" onclick="event.stopPropagation(); historyDelete('${item.id}')">
+                    <span class="history-menu-icon">🗑️</span> Delete
+                </button>
+            </div>
         </div>`;
     }).join('');
 }
 
+/* ── Kebab menu actions ──────────────────────────────────── */
+function toggleHistoryMenu(id) {
+    const menu = document.getElementById(`menu-${id}`);
+    if (!menu) return;
+    const isOpen = menu.classList.contains('show');
+
+    // Close all open menus first
+    closeAllHistoryMenus();
+
+    if (!isOpen) {
+        menu.classList.add('show');
+        // Also mark the kebab button as open (so it stays visible)
+        const item = document.getElementById(`hist-${id}`);
+        const kebab = item?.querySelector('.history-kebab');
+        if (kebab) kebab.classList.add('open');
+    }
+}
+window.toggleHistoryMenu = toggleHistoryMenu;
+
+function closeAllHistoryMenus() {
+    document.querySelectorAll('.history-menu.show').forEach(m => m.classList.remove('show'));
+    document.querySelectorAll('.history-kebab.open').forEach(k => k.classList.remove('open'));
+}
+
+// Close menus when clicking anywhere outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.history-kebab') && !e.target.closest('.history-menu')) {
+        closeAllHistoryMenus();
+    }
+});
+
+async function historyDelete(id) {
+    closeAllHistoryMenus();
+    const el = document.getElementById(`hist-${id}`);
+    if (el) {
+        el.style.transition = 'opacity 0.25s ease, max-height 0.35s ease, margin 0.35s ease';
+        el.style.opacity = '0';
+        el.style.maxHeight = el.offsetHeight + 'px';
+        requestAnimationFrame(() => {
+            el.style.maxHeight = '0';
+            el.style.marginBottom = '0';
+            el.style.overflow = 'hidden';
+            el.style.padding = '0 12px';
+            el.style.border = 'none';
+        });
+        setTimeout(() => el.remove(), 380);
+    }
+    try {
+        await authFetch(`/api/my-analyses/${id}`, { method: 'DELETE' });
+        historyAnalyses = historyAnalyses.filter(a => a.id !== id);
+        showToast('Moved to Bin. You can restore it anytime.', 'info');
+        loadBin();
+    } catch (e) {
+        showToast('Failed to delete.', 'error');
+    }
+}
+window.historyDelete = historyDelete;
+
+function historyDownload(id) {
+    closeAllHistoryMenus();
+    downloadReport(id, true);
+}
+window.historyDownload = historyDownload;
+
+function historyEmail(id) {
+    closeAllHistoryMenus();
+    openEmailModal(id, true);
+}
+window.historyEmail = historyEmail;
+
 async function openHistoricalAnalysis(id, el) {
+    // Don't navigate if the click was on the kebab menu
+    if (document.querySelector('.history-menu.show')) return;
+
     // highlight selected
     document.querySelectorAll('.history-item').forEach(e => e.classList.remove('active'));
     if (el) el.classList.add('active');
@@ -1114,6 +1201,7 @@ async function openHistoricalAnalysis(id, el) {
     }
 }
 window.openHistoricalAnalysis = openHistoricalAnalysis;
+
 
 // ── Actions (Download / Email) ──────────────────────────────
 
