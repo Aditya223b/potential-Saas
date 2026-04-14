@@ -422,10 +422,34 @@ def run_extraction_pipeline(
         financials = _get_multi_year_financials(raw_financials)
         job.extracted_financials = financials
         job.extraction_sources = raw_financials.get("sources", {})
-        job.source_previews = _generate_source_previews(pdf_paths, job.extraction_sources, job.job_id)
         years = financials.get("years_found", [])
         logger.info(f"[{job.job_id}] Step 3 DONE: {len(years)} years extracted: {years}")
         job.add_progress("extract", f"✅ Extracted financials for {len(years)} year(s): {', '.join(years)}", done=True)
+
+        # Source preview generation runs in background so it doesn't block the pipeline.
+        # By the time the analyst reaches the Verification table (after the projection
+        # upload step), the images are already fully rendered and waiting.
+        _preview_pdf_paths = list(pdf_paths)   # copy before finally-cleanup
+        _preview_sources   = dict(job.extraction_sources)
+        _preview_job_id    = job.job_id
+
+        def _build_previews_bg():
+            try:
+                previews = _generate_source_previews(
+                    _preview_pdf_paths, _preview_sources, _preview_job_id
+                )
+                # Write directly to Redis so the job state has the images
+                # when the analyst opens the Verification panel
+                job.source_previews = previews
+                job._persist_async()
+                logger.info(f"[{_preview_job_id}] Source previews generated in background ({len(previews)} year(s))")
+            except Exception as _e:
+                logger.warning(f"[{_preview_job_id}] Background source preview failed: {_e}")
+            finally:
+                # Clean up local PDFs now that preview rendering is done
+                _cleanup_local_uploads(_preview_pdf_paths)
+
+        threading.Thread(target=_build_previews_bg, daemon=True).start()
 
         # Step 4: Pause for projection upload
         job.add_progress("projection", "⏳ Awaiting company projection upload before analyst verification...")
@@ -437,8 +461,10 @@ def run_extraction_pipeline(
         job.error = str(e)
         job.set_status("failed")
         job.add_progress("error", f"❌ Error: {str(e)}", done=True)
-    finally:
+        # Clean up immediately on error (background preview thread won't run)
         _cleanup_local_uploads(pdf_paths)
+    # NOTE: On the happy path, PDF cleanup is handled inside _build_previews_bg
+    # after source previews have been rendered, so we do NOT call it here.
 
 def run_downstream_pipeline(job: AnalysisJob):
     """Resume pipeline after user approves the financials."""
@@ -712,44 +738,65 @@ def upload_projection(job_id):
         return jsonify({"error": "No projection files uploaded"}), 400
 
     projection_paths = []
-    projection_refs = []
     projection_names = []
 
     try:
         from pdf_parser import _upload_to_gemini
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+        # Save all files to disk first (this is fast — just local I/O)
         for uploaded in files:
             filename = uploaded.filename or ""
             if not filename:
                 continue
-
             safe_name = f"{job.job_id}_projection_{filename}"
             path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
             uploaded.save(path)
             projection_paths.append(path)
             projection_names.append(filename)
-            projection_refs.append(_upload_to_gemini(path))
 
-        if not projection_refs:
+        if not projection_paths:
             return jsonify({"error": "No valid projection files found"}), 400
 
+        # Upload all files to Gemini in parallel rather than serially.
+        # Serial uploads of e.g. 3 large files can take 3×2min = 6min,
+        # crashing Railway's 30s HTTP request timeout.
+        projection_refs = []
+        errors = []
+
+        def _upload_one(path):
+            return _upload_to_gemini(path)
+
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=min(len(projection_paths), 5)) as pool:
+            futures = {pool.submit(_upload_one, p): p for p in projection_paths}
+            for future in _cf.as_completed(futures):
+                try:
+                    projection_refs.append(future.result())
+                except Exception as _ue:
+                    errors.append(str(_ue))
+                    logger.warning(f"[{job.job_id}] Projection file upload failed: {_ue}")
+
+        if not projection_refs:
+            return jsonify({"error": f"All projection uploads failed: {'; '.join(errors)}"}), 500
+
         job.gemini_files.extend(projection_refs)
-        job.projection_filenames.extend(projection_names)
+        job.projection_filenames.extend(projection_names[:len(projection_refs)])
         job.document_catalog.extend(
             {"filename": name, "category": "management_projection"}
-            for name in projection_names
+            for name in projection_names[:len(projection_refs)]
         )
-        job.add_progress("projection", f"✅ Projection uploaded: {', '.join(projection_names)}", done=True)
+        job.add_progress("projection", f"✅ Projection uploaded: {', '.join(projection_names[:len(projection_refs)])}", done=True)
         job.add_progress("validate", "⏳ Waiting for human validation of extracted financial data...")
         job.set_status("waiting_for_user")
 
-        return jsonify({"status": "waiting_for_user", "projection_files": projection_names})
+        return jsonify({"status": "waiting_for_user", "projection_files": projection_names[:len(projection_refs)]})
     except Exception as e:
         logger.error(f"[{job.job_id}] Projection upload failed: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
     finally:
         _cleanup_local_uploads(projection_paths)
+
 
 @app.route("/api/restart_job/<job_id>", methods=["POST"])
 def restart_job(job_id):

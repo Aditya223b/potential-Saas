@@ -19,11 +19,16 @@ _MODEL_FALLBACK = "gemini-2.5-flash"
 _GENERATE_TIMEOUT = 300  # seconds — hard cap per Gemini call to prevent indefinite hangs
 
 
-def _generate_with_files(prompt: str, file_refs: list[str], require_json: bool = True, model_override: str = None) -> str:
-    """Send a prompt with uploaded file references to Gemini."""
-    models = [model_override] if model_override else [_MODEL_PRIMARY, _MODEL_FALLBACK]
+def _generate_with_files(prompt: str, file_refs: list[str]) -> str:
+    """
+    Send a prompt with uploaded file references to Gemini.
+    Uses Pro first, falls back to Flash on rate-limit or timeout.
+    NOTE: response_mime_type is intentionally NOT set — Gemini silently
+    hangs when that config is passed alongside file inputs.
+    """
+    models = [_MODEL_PRIMARY, _MODEL_FALLBACK]
 
-    # Fetch file objects
+    # Fetch file objects from Gemini
     file_objs = []
     if file_refs:
         for ref in file_refs:
@@ -33,7 +38,6 @@ def _generate_with_files(prompt: str, file_refs: list[str], require_json: bool =
                 print(f"Warning: could not retrieve file {ref}: {e}")
 
     contents = [*file_objs, prompt] if file_objs else prompt
-    config = {"response_mime_type": "application/json"} if require_json else None
 
     for model in models:
         for attempt in range(3):
@@ -43,7 +47,6 @@ def _generate_with_files(prompt: str, file_refs: list[str], require_json: bool =
                         _client.models.generate_content,
                         model=model,
                         contents=contents,
-                        config=config
                     )
                     try:
                         response = future.result(timeout=_GENERATE_TIMEOUT)
@@ -51,9 +54,7 @@ def _generate_with_files(prompt: str, file_refs: list[str], require_json: bool =
                         if model == _MODEL_PRIMARY:
                             print(f"   ⚠️  {model} timed out after {_GENERATE_TIMEOUT}s, falling back to {_MODEL_FALLBACK}...")
                             break  # try fallback model
-                        elif model_override:
-                            raise RuntimeError(f"Gemini {model} timed out after {_GENERATE_TIMEOUT}s")
-                        raise RuntimeError(f"Gemini {model} timed out after {_GENERATE_TIMEOUT}s")
+                        raise RuntimeError(f"Gemini {_MODEL_FALLBACK} also timed out after {_GENERATE_TIMEOUT}s — giving up.")
                 return response.text
             except (genai_errors.ServerError, genai_errors.ClientError) as e:
                 err_str = str(e)
@@ -63,13 +64,13 @@ def _generate_with_files(prompt: str, file_refs: list[str], require_json: bool =
                     print(f"   ⏳ {model} unavailable, retrying in {wait}s (attempt {attempt + 1}/3)...")
                     time.sleep(wait)
                     continue
-                elif is_retryable and model == _MODEL_PRIMARY and not model_override:
-                    print(f"   ⚠️  {model} unavailable, falling back to {_MODEL_FALLBACK}...")
+                elif is_retryable and model == _MODEL_PRIMARY:
+                    print(f"   ⚠️  {model} unavailable after {attempt+1} attempt(s), falling back to {_MODEL_FALLBACK}...")
                     break  # try fallback model
                 else:
                     raise
 
-    raise RuntimeError(f"All Gemini models unavailable after retries.")
+    raise RuntimeError("All Gemini models unavailable after retries.")
 
 
 def _generate(prompt: str) -> str:
@@ -201,12 +202,10 @@ IMPORTANT NOTES:
 
 Return ONLY the JSON object, no explanation.
 """
-    raw_response = _generate_with_files(
-        prompt, 
-        gemini_files, 
-        require_json=True, 
-        model_override=_MODEL_FALLBACK
-    )
+    # Use the standard Pro→Flash fallback chain.
+    # DO NOT pass response_mime_type here — Gemini silently hangs
+    # when that config is combined with file inputs.
+    raw_response = _generate_with_files(prompt, gemini_files)
     return _parse_json_response(raw_response)
 
 

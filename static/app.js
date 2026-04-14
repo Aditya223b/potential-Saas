@@ -534,32 +534,46 @@ function listenToProgress(jobId, _retryCount = 0) {
 
     es.onerror = () => {
         es.close();
-        const nextRetry = _retryCount + 1;
-        
-        // After 3 SSE failures, fall back to polling (more resilient on cloud hosts like Render)
-        if (nextRetry >= 3) {
-            console.warn('SSE failed 3 times, falling back to polling...');
-            pollProgress(jobId);
-            return;
-        }
-        
+
+        // ALWAYS check the real job status first — the SSE may have closed
+        // intentionally (awaiting_projection / waiting_for_user) and NOT
+        // because of a network error. Re-opening SSE in those states causes
+        // an infinite retry loop and prevents the projection/validation UI
+        // from ever rendering.
         setTimeout(async () => {
             try {
                 const res = await authFetch(`/api/result/${jobId}`);
                 const data = await res.json();
-                if (data.status === 'completed' || data.status === 'failed') {
-                    loadResults(jobId);
-                } else if (data.status === 'awaiting_projection') {
+                const status = data.status;
+
+                if (status === 'awaiting_projection') {
                     showProjectionUploadView(jobId);
-                } else if (data.status === 'waiting_for_user') {
+                } else if (status === 'waiting_for_user') {
                     showValidationSplitView(jobId);
+                } else if (status === 'completed') {
+                    loadResults(jobId);
+                } else if (status === 'failed') {
+                    showToast(data.error || 'Analysis failed.', 'error');
                 } else {
-                    listenToProgress(jobId, nextRetry);
+                    // Job is still running — reconnect SSE (with retry guard)
+                    const nextRetry = _retryCount + 1;
+                    if (nextRetry >= 3) {
+                        console.warn('SSE failed 3 times, falling back to polling...');
+                        pollProgress(jobId);
+                    } else {
+                        listenToProgress(jobId, nextRetry);
+                    }
                 }
             } catch(e) {
-                listenToProgress(jobId, nextRetry);
+                // Network error fetching status — retry SSE conservatively
+                const nextRetry = _retryCount + 1;
+                if (nextRetry >= 3) {
+                    pollProgress(jobId);
+                } else {
+                    setTimeout(() => listenToProgress(jobId, nextRetry), 3000);
+                }
             }
-        }, 2000);
+        }, 1500); // short delay to let server settle before checking status
     };
 }
 
@@ -1730,6 +1744,7 @@ async function openStepDetail(step) {
     const advBtn = document.getElementById('advanceWorkflowBtn');
 
     panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     title.textContent = `${STEP_CONFIG[step]?.icon || ''} ${STEP_CONFIG[step]?.label || step}`;
     content.innerHTML = '<div class="spinner" style="margin:16px auto"></div>';
     advBtn.style.display = 'none';
@@ -1751,6 +1766,7 @@ async function openStepDetail(step) {
             <div style="margin-bottom:12px">${statusBadge}</div>
             ${stepContent}
         `;
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (err) {
         content.innerHTML = '<p style="color:var(--danger)">Failed to load step data.</p>';
     }
