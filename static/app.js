@@ -382,7 +382,7 @@ function renderFileList() {
     toStep2Btn.disabled = false;
     fileList.innerHTML = selectedFiles.map((f, i) => `
         <div class="file-item">
-            <span class="file-icon">📄</span>
+            <span class="file-icon"><i data-lucide="file-text" style="width: 14px;"></i></span>
             <span class="file-name">${f.name}</span>
             <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
             <button class="file-remove" onclick="removeFile(${i})">✕</button>
@@ -400,7 +400,7 @@ function renderProjectionFileList() {
     projectionFileList.style.display = 'block';
     projectionFileList.innerHTML = selectedProjectionFiles.map((f, i) => `
         <div class="file-item">
-            <span class="file-icon">📈</span>
+            <span class="file-icon"><i data-lucide="trending-up" style="width: 14px;"></i></span>
             <span class="file-name">${f.name}</span>
             <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
             <button class="file-remove" onclick="removeProjectionFile(${i})">✕</button>
@@ -438,7 +438,8 @@ async function startAnalysis() {
         if (!res.ok) {
             showToast(data.error || 'Upload failed', 'error');
             btn.disabled = false;
-            btn.innerHTML = '🚀 Start Analysis';
+            btn.innerHTML = '<i data-lucide="rocket" style="width: 14px; margin-right: 4px; vertical-align: text-bottom;"></i> Start Analysis';
+            lucide.createIcons();
             return;
         }
 
@@ -451,28 +452,29 @@ async function startAnalysis() {
     } catch (err) {
         showToast('Network error. Please try again.', 'error');
         btn.disabled = false;
-        btn.innerHTML = '🚀 Start Analysis';
+        btn.innerHTML = '<i data-lucide="rocket" style="width: 14px; margin-right: 4px; vertical-align: text-bottom;"></i> Start Analysis';
+        lucide.createIcons();
     }
 }
 window.startAnalysis = startAnalysis;
 
 // ── Progress Tracking ───────────────────────────────────────
 const STEP_CONFIG = {
-    parse: { label: 'Parsing Financial Statements', icon: '📄' },
-    categorize: { label: 'Document Categorisation', icon: '🗂️' },
-    extract: { label: 'Extracting Financial Figures', icon: '🔢' },
-    projection: { label: 'Upload Company Projections', icon: '📈' },
-    validate: { label: 'Analyst Verification', icon: '🔍' },
-    web: { label: 'Web Research', icon: '🌐' },
-    background: { label: 'Company Background Analysis', icon: '🏢' },
-    competitors: { label: 'Competitor Analysis', icon: '⚔️' },
-    ratios: { label: 'Calculating Financial Ratios', icon: '📊' },
-    projection_analysis: { label: 'Reviewing Management Projections', icon: '📈' },
-    financial: { label: 'Deep Financial Analysis', icon: '📈' },
-    risks: { label: 'Risk Assessment', icon: '⚠️' },
-    recommendation: { label: 'Investment Recommendation', icon: '💡' },
-    report: { label: 'Generating Report', icon: '📝' },
-    save: { label: 'Saving to your Profile', icon: '💾' },
+    parse: { label: 'Parsing Financial Statements', icon: '<i data-lucide="file-text" style="width:14px; margin-top:2px;"></i>' },
+    categorize: { label: 'Document Categorisation', icon: '<i data-lucide="layout-grid" style="width:14px; margin-top:2px;"></i>' },
+    extract: { label: 'Extracting Financial Figures', icon: '<i data-lucide="calculator" style="width:14px; margin-top:2px;"></i>' },
+    projection: { label: 'Upload Company Projections', icon: '<i data-lucide="trending-up" style="width:14px; margin-top:2px;"></i>' },
+    validate: { label: 'Analyst Verification', icon: '<i data-lucide="search" style="width:14px; margin-top:2px;"></i>' },
+    web: { label: 'Web Research', icon: '<i data-lucide="globe" style="width:14px; margin-top:2px;"></i>' },
+    background: { label: 'Company Background Analysis', icon: '<i data-lucide="building" style="width:14px; margin-top:2px;"></i>' },
+    competitors: { label: 'Competitor Analysis', icon: '<i data-lucide="users" style="width:14px; margin-top:2px;"></i>' },
+    ratios: { label: 'Calculating Financial Ratios', icon: '<i data-lucide="bar-chart" style="width:14px; margin-top:2px;"></i>' },
+    projection_analysis: { label: 'Reviewing Management Projections', icon: '<i data-lucide="trending-up" style="width:14px; margin-top:2px;"></i>' },
+    financial: { label: 'Deep Financial Analysis', icon: '<i data-lucide="trending-up" style="width:14px; margin-top:2px;"></i>' },
+    risks: { label: 'Risk Assessment', icon: '<i data-lucide="alert-triangle" style="width:14px; margin-top:2px;"></i>' },
+    recommendation: { label: 'Investment Recommendation', icon: '<i data-lucide="bot" style="width:14px; margin-top:2px;"></i>' },
+    report: { label: 'Generating Report', icon: '<i data-lucide="file-edit" style="width:14px; margin-top:2px;"></i>' },
+    save: { label: 'Saving to your Profile', icon: '<i data-lucide="save" style="width:14px; margin-top:2px;"></i>' },
 };
 
 function showProgressSection() {
@@ -494,6 +496,7 @@ function showProgressSection() {
             <div class="step-inspect-hint">›</div>
         </div>
     `).join('');
+    lucide.createIcons();
 }
 
 function listenToProgress(jobId, _retryCount = 0) {
@@ -620,12 +623,13 @@ function updateStep(step, message, done) {
 
     if (done) {
         stepEl.classList.remove('active'); stepEl.classList.add('done');
-        indicatorEl.className = 'step-indicator done'; indicatorEl.innerHTML = '✓';
+        indicatorEl.className = 'step-indicator done'; indicatorEl.innerHTML = '<i data-lucide="check" style="width:16px;"></i>';
     } else {
         stepEl.classList.add('active');
         indicatorEl.className = 'step-indicator active'; indicatorEl.innerHTML = '<div class="spinner"></div>';
     }
     if (detailEl) detailEl.textContent = message;
+    lucide.createIcons();
 }
 
 // ── Results Rendering ───────────────────────────────────────
@@ -696,7 +700,7 @@ function renderResultsView(result, jobId, isHistorical = false) {
     // Executive Summary
     html += `
     <div class="section-card">
-        <h3><span class="icon">📋</span> Executive Summary</h3>
+        <h3><span class="icon"><i data-lucide="clipboard-list" style="width: 20px;"></i></span> Executive Summary</h3>
         <p class="summary-text">${fin.executive_summary || 'N/A'}</p>
         ${fin.key_highlights ? `
         <ul class="bullet-list" style="margin-top:14px">
@@ -707,7 +711,7 @@ function renderResultsView(result, jobId, isHistorical = false) {
     // Background
     html += `
     <div class="section-card">
-        <h3><span class="icon">🏢</span> Company Background</h3>
+        <h3><span class="icon"><i data-lucide="building" style="width: 20px;"></i></span> Company Background</h3>
         <div class="info-grid">
             <div class="info-item"><div class="label">Industry</div><div class="value">${bg.industry || 'N/A'}</div></div>
             <div class="info-item"><div class="label">Sub-Industry</div><div class="value">${bg.sub_industry || 'N/A'}</div></div>
@@ -720,7 +724,7 @@ function renderResultsView(result, jobId, isHistorical = false) {
     // Ratios
     html += `
     <div class="section-card">
-        <h3><span class="icon">📊</span> Financial Ratios</h3>
+        <h3><span class="icon"><i data-lucide="bar-chart-2" style="width: 20px;"></i></span> Financial Ratios</h3>
         ${renderRatioTables(ratios)}
     </div>`;
 
@@ -735,7 +739,7 @@ function renderResultsView(result, jobId, isHistorical = false) {
         };
         html += `
     <div class="section-card">
-        <h3><span class="icon">📈</span> Management Projection Review</h3>
+        <h3><span class="icon"><i data-lucide="trending-up" style="width: 20px;"></i></span> Management Projection Review</h3>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
             <span class="badge ${credibilityColor[proj.overall_credibility] || 'badge-orange'}">
                 Overall: ${proj.overall_credibility || 'N/A'}
@@ -1088,17 +1092,17 @@ function renderHistoryList(items) {
                 <span class="h-badge ${vClass}">${v.length > 10 ? v.substring(0,8)+'...' : v}</span>
             </div>
             <!-- 3-dot kebab button -->
-            <button class="history-kebab" onclick="event.stopPropagation(); toggleHistoryMenu('${item.id}')" title="Options">⋮</button>
+            <button class="history-kebab" onclick="event.stopPropagation(); toggleHistoryMenu('${item.id}')" title="Options"><i data-lucide="more-vertical" style="width: 18px; pointer-events: none;"></i></button>
             <!-- Dropdown -->
             <div class="history-menu" id="menu-${item.id}">
                 <button class="history-menu-item" onclick="event.stopPropagation(); historyDownload('${item.id}')">
-                    <span class="history-menu-icon">📥</span> Download
+                    <span class="history-menu-icon" style="margin-right: -4px;"><i data-lucide="download" style="width: 16px;"></i></span> Download
                 </button>
                 <button class="history-menu-item" onclick="event.stopPropagation(); historyEmail('${item.id}')">
-                    <span class="history-menu-icon">✉️</span> Share via Email
+                    <span class="history-menu-icon" style="margin-right: -4px;"><i data-lucide="mail" style="width: 16px;"></i></span> Share via Email
                 </button>
                 <button class="history-menu-item danger" onclick="event.stopPropagation(); historyDelete('${item.id}')">
-                    <span class="history-menu-icon">🗑️</span> Delete
+                    <span class="history-menu-icon" style="margin-right: -4px;"><i data-lucide="trash-2" style="width: 16px;"></i></span> Delete
                 </button>
             </div>
         </div>`;
@@ -1121,6 +1125,7 @@ function toggleHistoryMenu(id) {
         const kebab = item?.querySelector('.history-kebab');
         if (kebab) kebab.classList.add('open');
     }
+    lucide.createIcons();
 }
 window.toggleHistoryMenu = toggleHistoryMenu;
 
@@ -1412,11 +1417,11 @@ async function saveReport(jobId) {
             loadInProgressJobs();
         } else {
             showToast(data.error || 'Failed to save.', 'error');
-            if (btn) { btn.disabled = false; btn.textContent = '💾 Save to History'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="save" style="width:16px; margin-right:4px; vertical-align:text-bottom;"></i> Save to History'; lucide.createIcons(); }
         }
     } catch (err) {
         showToast('Network error.', 'error');
-        if (btn) { btn.disabled = false; btn.textContent = '💾 Save to History'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="save" style="width:16px; margin-right:4px; vertical-align:text-bottom;"></i> Save to History'; lucide.createIcons(); }
     }
 }
 window.saveReport = saveReport;

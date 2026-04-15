@@ -132,7 +132,7 @@ def send_report_email(
     # ── Send ──────────────────────────────────────────────────────────────────
     try:
         print(f"  📧 Connecting to {SMTP_HOST}:{SMTP_PORT} as {smtp_email}...")
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()

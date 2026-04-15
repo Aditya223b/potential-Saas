@@ -1017,14 +1017,55 @@ def download(job_id):
 @app.route("/api/email/<job_id>", methods=["POST"])
 def send_email(job_id):
     """Send the report via email, attaching the DOCX from Supabase Storage if available."""
-    job = get_job_object(job_id)
-    if not job or not job.result:
-        return jsonify({"error": "Analysis not complete"}), 400
-
     data = request.get_json()
     email = data.get("email", "").strip()
     if not email:
         return jsonify({"error": "Email is required"}), 400
+
+    analysis_data = None
+    company_name = "Unknown"
+    report_path_to_use = None
+    storage_path = None
+    recommendation = ""
+    summary = ""
+
+    # Try resolving as an active Redis job first
+    job = get_job_object(job_id)
+    if job and job.result:
+        analysis_data = job.result
+        company_name = job.result.get("company_name", "Unknown")
+        report_path_to_use = job.report_path
+        storage_path = job.result.get("_report_storage_path") or (f"{job.user_id}/{job.job_id}.docx" if job.user_id else None)
+        rec = job.result.get("recommendation", {})
+        recommendation = rec.get("recommendation", "") if isinstance(rec, dict) else str(rec)
+        summary = job.result.get("financial_analysis", {}).get("executive_summary", "")
+    else:
+        # Check if it's a Supabase historical analysis ID (UUID)
+        import uuid
+        try:
+            uuid.UUID(job_id)
+            is_uuid = True
+        except ValueError:
+            is_uuid = False
+            
+        if is_uuid:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split("Bearer ", 1)[1].strip()
+                from supabase_client import verify_user_token, get_analysis
+                user = verify_user_token(token)
+                if user:
+                    hist_data = get_analysis(job_id, user["id"])
+                    if hist_data:
+                        analysis_data = hist_data.get("analysis_data", {})
+                        company_name = hist_data.get("company_name", "Unknown")
+                        storage_path = hist_data.get("report_storage_path")
+                        recommendation = hist_data.get("recommendation", "N/A")
+                        # Some legacy saves might have summary in analysis_data
+                        summary = analysis_data.get("financial_analysis", {}).get("executive_summary", "")
+
+    if not analysis_data:
+        return jsonify({"error": "Analysis not complete or not found"}), 400
 
     # ── Resolve the DOCX path ────────────────────────────────────────────────
     # On Railway the web server and worker run in separate containers, so
@@ -1032,19 +1073,11 @@ def send_email(job_id):
     # We download from Supabase Storage instead.
     import tempfile, shutil
     tmp_report_path = None
-    report_path_to_use = job.report_path  # may be None or a dead path
 
     # Try to download from Supabase Storage if the local path is gone
     if not report_path_to_use or not os.path.exists(report_path_to_use):
         try:
             from supabase_client import download_report_file
-            storage_path = None
-            # storage_path is stored in the analysis result metadata or job
-            if hasattr(job, "result") and job.result:
-                storage_path = job.result.get("_report_storage_path")
-            if not storage_path and job.user_id:
-                storage_path = f"{job.user_id}/{job.job_id}.docx"  # conventional path
-
             if storage_path:
                 report_bytes = download_report_file(storage_path)
                 if report_bytes:
@@ -1058,9 +1091,6 @@ def send_email(job_id):
 
     # Still no file — email body only (no attachment)
     from email_sender import send_report_email
-    rec = job.result.get("recommendation", {})
-    summary = job.result.get("financial_analysis", {}).get("executive_summary", "")
-    company_name = job.result.get("company_name", "Unknown")
 
     try:
         success, error_reason = send_report_email(
@@ -1068,7 +1098,7 @@ def send_email(job_id):
             company_name=company_name,
             report_path=report_path_to_use or "",
             analysis_summary=summary,
-            recommendation=rec.get("recommendation", ""),
+            recommendation=recommendation,
         )
     finally:
         # Clean up temp file if we created one

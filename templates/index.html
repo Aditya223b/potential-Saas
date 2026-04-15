@@ -15,7 +15,7 @@
 <div id="authScreen" class="auth-screen">
     <div class="auth-card">
         <div class="auth-logo">
-            <div class="logo-icon">📊</div>
+            <div class="logo-icon"><i data-lucide="bar-chart-2"></i></div>
             <span>Fin<em>Analyzer</em> AI</span>
         </div>
         <p class="auth-subtitle">AI-powered financial statement analysis</p>
@@ -49,13 +49,13 @@
     <!-- ═══ SIDEBAR ═══ -->
     <aside class="sidebar" id="mainSidebar">
         <div class="sidebar-logo">
-            <div class="logo-icon">📊</div>
+            <div class="logo-icon"><i data-lucide="bar-chart-2"></i></div>
             <span>FinAnalyzer</span>
         </div>
 
         <div class="sidebar-group">
             <button class="nav-link" onclick="goHome()" title="Home">
-                🏠
+                <i data-lucide="home"></i>
                 <span class="nav-label">Home</span>
             </button>
         </div>
@@ -84,7 +84,7 @@
         <!-- Bin Pane -->
         <div class="history-pane bin-pane" id="binPane" style="flex:0 0 auto;overflow-y:visible;">
             <h4 class="bin-heading" onclick="toggleBinPane()" title="Click to expand/collapse">
-                🗑️ Bin
+                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Bin
                 <span class="bin-count-badge" id="binCountBadge" style="display:none"></span>
                 <span class="bin-toggle-icon" id="binToggleIcon">›</span>
             </h4>
@@ -195,7 +195,7 @@
                         <label class="option-card">
                             <input type="checkbox" checked data-module="background">
                             <div class="option-body">
-                                <span class="option-icon">🏢</span>
+                                <span class="option-icon"><i data-lucide="building"></i></span>
                                 <span class="option-label">Company Background</span>
                                 <span class="option-desc">Industry, products, management</span>
                             </div>
@@ -211,7 +211,7 @@
                         <label class="option-card">
                             <input type="checkbox" checked data-module="ratios">
                             <div class="option-body">
-                                <span class="option-icon">📊</span>
+                                <span class="option-icon"><i data-lucide="bar-chart"></i></span>
                                 <span class="option-label">Financial Ratios</span>
                                 <span class="option-desc">Liquidity, profitability, leverage</span>
                             </div>
@@ -280,7 +280,7 @@
                     <div class="wizard-actions">
                         <button class="btn btn-ghost" onclick="goToStep(2)">← Back</button>
                         <button class="btn btn-primary btn-launch" id="launchBtn" onclick="startAnalysis()">
-                            🚀 Start Analysis
+                            <i data-lucide="rocket" style="width: 16px; height: 16px; vertical-align: text-bottom; margin-right: 4px;"></i> Start Analysis
                         </button>
                     </div>
                 </div>
@@ -317,7 +317,7 @@
                     <div class="validation-right-pane" id="validationRightPane" style="display:none;">
                         <div id="projectionUploadPanel">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <h3>📈 Upload Company Projections</h3>
+                                <h3><i data-lucide="trending-up" style="width: 18px; display: inline-block; vertical-align: -2px; margin-right: 4px;"></i> Upload Company Projections</h3>
                             </div>
                             <p class="subtitle" style="margin-bottom: 16px;">
                                 Stage 1 is complete. Upload the company’s projected financials before analyst verification.
@@ -334,7 +334,7 @@
 
                         <div id="validationPanel" style="display:none; flex:1; flex-direction:column; min-height:0;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <h3>🔍 Validate Extracted Financials</h3>
+                                <h3><i data-lucide="search" style="width: 18px; display: inline-block; vertical-align: -2px; margin-right: 4px;"></i> Validate Extracted Financials</h3>
                                 <button class="btn btn-sm btn-ghost" onclick="exportToExcel()">⬇️ Download Excel</button>
                             </div>
                             <p class="subtitle" style="margin-bottom: 16px;">
@@ -392,7 +392,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for Excel formatting -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-<script src="/static/app.js?v=10"></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="/static/app.js?v=11"></script>
 
+<script>
+    lucide.createIcons();
+</script>
 </body>
 </html>
