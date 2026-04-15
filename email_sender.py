@@ -130,9 +130,17 @@ def send_report_email(
         print(f"  ⚠️  Report file not found at '{report_path}' — sending email without DOCX attachment")
 
     # ── Send ──────────────────────────────────────────────────────────────────
+    import socket
+    orig_getaddrinfo = socket.getaddrinfo
+    def getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+        res = orig_getaddrinfo(host, port, family, type, proto, flags)
+        ipv4_res = [r for r in res if r[0] == socket.AF_INET]
+        return ipv4_res if ipv4_res else res
+
+    socket.getaddrinfo = getaddrinfo_ipv4
     try:
         print(f"  📧 Connecting to {SMTP_HOST}:{SMTP_PORT} as {smtp_email}...")
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
@@ -154,3 +162,5 @@ def send_report_email(
         reason = f"Email send failed: {e}"
         print(f"  ❌ {reason}")
         return False, reason
+    finally:
+        socket.getaddrinfo = orig_getaddrinfo

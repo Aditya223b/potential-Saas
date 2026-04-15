@@ -1040,7 +1040,8 @@ def send_email(job_id):
         recommendation = rec.get("recommendation", "") if isinstance(rec, dict) else str(rec)
         summary = job.result.get("financial_analysis", {}).get("executive_summary", "")
     else:
-        # Check if it's a Supabase historical analysis ID (UUID)
+        # Fallback 1: Might be a purely historical UUID
+        # Fallback 2: Might be an active Redis job_id that expired from Redis, but was saved to 'analyses'
         import uuid
         try:
             uuid.UUID(job_id)
@@ -1048,24 +1049,48 @@ def send_email(job_id):
         except ValueError:
             is_uuid = False
             
-        if is_uuid:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header.split("Bearer ", 1)[1].strip()
-                from supabase_client import verify_user_token, get_analysis
-                user = verify_user_token(token)
-                if user:
-                    hist_data = get_analysis(job_id, user["id"])
-                    if hist_data:
-                        analysis_data = hist_data.get("analysis_data", {})
-                        company_name = hist_data.get("company_name", "Unknown")
-                        storage_path = hist_data.get("report_storage_path")
-                        recommendation = hist_data.get("recommendation", "N/A")
-                        # Some legacy saves might have summary in analysis_data
-                        summary = analysis_data.get("financial_analysis", {}).get("executive_summary", "")
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split("Bearer ", 1)[1].strip()
+            from supabase_client import verify_user_token, _get_admin_client
+            user = verify_user_token(token)
+            if user:
+                try:
+                    query = _get_admin_client().table("analyses").select("*").eq("user_id", user["id"])
+                    if is_uuid:
+                        query = query.eq("id", job_id)
+                    else:
+                        query = query.eq("job_id", job_id)
+                    
+                    res = query.order('created_at', desc=True).limit(1).execute()
+                    hist_data = res.data[0] if res.data else None
+                except Exception as e:
+                    logger.error(f"[{job_id}] Fallback query failed: {e}")
+                    hist_data = None
+                
+                if hist_data:
+                    logger.info(f"[{job_id}] found fallback analysis_data")
+                    analysis_data = hist_data.get("analysis_data", {})
+                    company_name = hist_data.get("company_name", "Unknown")
+                    storage_path = hist_data.get("report_storage_path")
+                    
+                    rec = hist_data.get("recommendation", {})
+                    if isinstance(rec, dict):
+                        recommendation = rec.get("recommendation", "N/A")
+                    else:
+                        recommendation = str(rec)
+                        
+                    summary = analysis_data.get("financial_analysis", {}).get("executive_summary", "")
+                else:
+                    logger.error(f"[{job_id}] fallback query returned None")
+            else:
+                logger.error(f"[{job_id}] verify_user_token failed")
+        else:
+            logger.error(f"[{job_id}] missing or invalid Authorization header")
 
     if not analysis_data:
-        return jsonify({"error": "Analysis not complete or not found"}), 400
+        logger.error(f"[{job_id}] returning 'Analysis not complete or not found'")
+        return jsonify({"error": "Analysis not complete or not found (Redis expired, no save found)"}), 400
 
     # ── Resolve the DOCX path ────────────────────────────────────────────────
     # On Railway the web server and worker run in separate containers, so
