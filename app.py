@@ -199,6 +199,7 @@ class AnalysisJob:
         self.company_name = None
         self.company_website = ""
         self.company_context = ""
+        self.email = ""
         self.parsed_text = None
         self.background = None
         self.competitors = None
@@ -224,6 +225,7 @@ class AnalysisJob:
         job.company_name = data.get("company_name")
         job.company_website = data.get("company_website", "")
         job.company_context = data.get("company_context", "")
+        job.email = data.get("email", "")
         job.parsed_text = data.get("parsed_text")
         job.background = data.get("background")
         job.competitors = data.get("competitors")
@@ -287,6 +289,7 @@ class AnalysisJob:
             "company_name": self.company_name,
             "company_website": self.company_website,
             "company_context": self.company_context,
+            "email": self.email,
             "parsed_text": self.parsed_text,
             "background": self.background,
             "competitors": self.competitors,
@@ -616,6 +619,20 @@ def run_downstream_pipeline(job: AnalysisJob):
                 job.add_progress("save", "✅ Saved to your profile", done=True)
         else:
             job.add_progress("save", "ℹ️ Save skipped (anonymous analysis)", done=True)
+            
+        # Send Email Automatically if provided
+        if job.email:
+            job.add_progress("email", f"📧 Emailing report to {job.email}...", done=False)
+            try:
+                from email_sender import send_report_email
+                success, err_reason = send_report_email(job.email, company_name, report_path)
+                if success:
+                    job.add_progress("email", "✅ Report emailed successfully", done=True)
+                else:
+                    job.add_progress("email", f"⚠️ Email failed: {err_reason}", done=True)
+            except Exception as e:
+                logger.error(f"[{job.job_id}] Email dispatch failed: {e}")
+                job.add_progress("email", f"⚠️ Email failed: {str(e)}", done=True)
 
         job.set_status("completed")
 
@@ -683,6 +700,8 @@ def upload():
         return jsonify({"error": "No valid PDF files found"}), 400
 
     job = AnalysisJob(job_id, filenames, user_id=user_id)
+    job.email = request.form.get("email", "").strip()
+    
     # Step 1: Initialize job row in Supabase (INSERT), then persist state
     if user_id:
         from supabase_client import create_job
@@ -1183,7 +1202,22 @@ def my_jobs():
     """List all in-progress (non-completed) jobs for the authenticated user."""
     from supabase_client import get_user_jobs
     jobs = get_user_jobs(g.user["id"])
-    return jsonify({"jobs": jobs})
+    active_jobs = []
+    
+    # Verify current state in Redis to avoid race condition delays from DB persistence
+    for j in jobs:
+        cached = redis_conn.get(f"job_state:{j['job_id']}")
+        if cached:
+            try:
+                parsed = json.loads(cached)
+                if parsed.get("status") in ("completed", "failed"):
+                    continue  # Skip it, Redis confirms it actually finished
+                j.update(parsed)  # Merge redish state which is more current
+            except json.JSONDecodeError:
+                pass
+        active_jobs.append(j)
+        
+    return jsonify({"jobs": active_jobs})
 
 
 @app.route("/api/jobs/<job_id>/stop", methods=["POST"])

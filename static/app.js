@@ -263,7 +263,15 @@ function syncCompanyContextInput() {
 
 function goToStep(step) {
     // Validate Step 1 -> 2
-    if (step === 2 && selectedFiles.length === 0) return;
+    if (step === 2) {
+        if (selectedFiles.length === 0) return;
+        const emailInput = document.getElementById('emailInput');
+        if (!emailInput || !emailInput.value.trim()) {
+            showToast('Please provide an email for report delivery.', 'error');
+            if (emailInput) emailInput.focus();
+            return;
+        }
+    }
 
     // Validate Step 2 -> 3
     if (step === 3) {
@@ -671,7 +679,6 @@ function renderResultsView(result, jobId, isHistorical = false) {
         <div class="results-actions">
             <button class="btn btn-primary" onclick="downloadReport('${isHistorical ? jobId : jobId}', ${isHistorical})">📥 Download DOCX</button>
             ${!isHistorical ? `<button class="btn btn-accent" onclick="saveReport('${jobId}')" id="saveReportBtn">💾 Save to History</button>` : ''}
-            <button class="btn btn-secondary" onclick="openEmailModal('${jobId}', ${isHistorical})">📧 Email Report</button>
             <button class="btn btn-ghost" onclick="newAnalysis()" style="border:1px solid var(--border)">✨ New Analysis</button>
         </div>
     </div>

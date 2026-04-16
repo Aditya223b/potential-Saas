@@ -161,6 +161,11 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="emailInput">Email for Report Delivery <span class="required" style="color:var(--danger); font-size:0.85em; margin-left:4px;">(Required)</span></label>
+                        <input type="email" id="emailInput" placeholder="recipient@company.com" required>
+                    </div>
+
+                    <div class="form-group">
                         <label for="companyContextInput">Company Operations Notes <span class="optional">(optional, up to 300 words)</span></label>
                         <textarea id="companyContextInput" rows="6" placeholder="Describe the company, its products, services, customers, operations, or anything else that would help the research."></textarea>
                         <div class="field-help">
@@ -234,10 +239,7 @@
                         </label>
                     </div>
 
-                    <div class="form-group" style="margin-top:24px">
-                        <label for="emailInput">Email for Report Delivery <span class="optional">(optional)</span></label>
-                        <input type="email" id="emailInput" placeholder="recipient@company.com">
-                    </div>
+
 
                     <div class="wizard-actions">
                         <button class="btn btn-ghost" onclick="goToStep(1)">← Back</button>
