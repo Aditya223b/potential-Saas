@@ -1014,8 +1014,98 @@ h1, h2, h3, h4 {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Results Section ───────────────────────────────────────── */
-#resultsSection { max-width: 900px; margin: 0 auto 48px; }
+#resultsSection { max-width: 960px; margin: 0 auto 48px; }
 
+/* Analysis page header */
+.analysis-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+.analysis-page-title h2 {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.04em;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.analysis-page-subtitle {
+  font-size: 13px; color: var(--text-muted); font-weight: 500;
+}
+
+/* Three-card tab selector */
+.analysis-tab-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.analysis-tab-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 28px 20px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.analysis-tab-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.analysis-tab-card.active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(0,102,255,0.06), rgba(0,200,150,0.04));
+  box-shadow: 0 0 0 3px rgba(0,102,255,0.08), var(--shadow-lg);
+}
+.tab-card-icon {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: all 0.18s ease;
+}
+.tab-card-icon svg { width: 22px; height: 22px; }
+.analysis-tab-card.active .tab-card-icon {
+  background: rgba(0,102,255,0.1);
+  border-color: rgba(0,102,255,0.2);
+  color: var(--accent);
+}
+.tab-card-label {
+  font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  text-align: center; letter-spacing: -0.01em;
+}
+.analysis-tab-card.active .tab-card-label { color: var(--accent); }
+
+/* Tab actions bar at bottom of Final Doc */
+.tab-actions-bar {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  padding: 20px 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-top: 8px;
+}
+
+/* Projected empty state */
+.projected-empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 64px 32px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+/* Legacy compat */
 .results-header {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;
 }

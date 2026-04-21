@@ -669,181 +669,233 @@ function renderResultsView(result, jobId, isHistorical = false) {
     const fin = result.financial_analysis || {};
     const risk = result.risk_analysis || {};
     const ratios = result.computed_ratios || {};
-    
+    const proj = result.projection_analysis || {};
+
     const verdict = (rec.recommendation || 'N/A').toUpperCase();
     const verdictClass = verdict === 'BUY' ? 'buy' : verdict === 'HOLD' ? 'hold' : (verdict === 'SELL' || verdict === 'AVOID') ? 'avoid' : '';
 
-    let html = `
-    <div class="results-header">
-        <h2>📊 ${result.company_name || 'Financial Analysis'}</h2>
-        <div class="results-actions">
-            <button class="btn btn-primary" onclick="downloadReport('${isHistorical ? jobId : jobId}', ${isHistorical})">📥 Download DOCX</button>
-            ${!isHistorical ? `<button class="btn btn-accent" onclick="saveReport('${jobId}')" id="saveReportBtn">💾 Save to History</button>` : ''}
-            <button class="btn btn-ghost" onclick="newAnalysis()" style="border:1px solid var(--border)">✨ New Analysis</button>
+    // ── Build tab content ────────────────────────────────────────────────────
+
+    // TAB 1: Final Doc (summary, verdict, background, risks, recommendation)
+    const finalDocContent = `
+        <div class="verdict-card ${verdictClass}" style="margin-bottom:24px">
+            <div class="verdict-label">Investment Recommendation</div>
+            <div class="verdict-value ${verdictClass}">${verdict}</div>
+            <div class="summary-text" style="max-width:600px;margin:0 auto">${rec.summary || ''}</div>
+            <div class="verdict-meta">
+                <div class="v-meta-item">
+                    <div class="label">Confidence</div>
+                    <div class="value">${rec.confidence_level || 'N/A'}</div>
+                </div>
+                <div class="v-meta-item">
+                    <div class="label">Horizon</div>
+                    <div class="value">${rec.target_horizon || 'N/A'}</div>
+                </div>
+                <div class="v-meta-item">
+                    <div class="label">Suitable For</div>
+                    <div class="value">${rec.suitable_for || 'N/A'}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="clipboard-list" style="width:20px"></i></span> Executive Summary</h3>
+            <p class="summary-text">${fin.executive_summary || 'N/A'}</p>
+            ${fin.key_highlights ? `<ul class="bullet-list" style="margin-top:14px">${fin.key_highlights.map(h => `<li>${h}</li>`).join('')}</ul>` : ''}
+        </div>
+
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="building" style="width:20px"></i></span> Company Background</h3>
+            <div class="info-grid">
+                <div class="info-item"><div class="label">Industry</div><div class="value">${bg.industry || 'N/A'}</div></div>
+                <div class="info-item"><div class="label">Sub-Industry</div><div class="value">${bg.sub_industry || 'N/A'}</div></div>
+                <div class="info-item"><div class="label">Headquarters</div><div class="value">${bg.headquarters || 'N/A'}</div></div>
+                <div class="info-item"><div class="label">Business Model</div><div class="value">${bg.business_model || 'N/A'}</div></div>
+            </div>
+            ${bg.company_description ? `<p class="summary-text" style="margin-top:16px">${bg.company_description}</p>` : ''}
+        </div>
+
+        <div class="section-card">
+            <h3><span class="icon">⚠️</span> Risk Factors</h3>
+            <div style="margin-bottom:16px">
+                <span class="badge ${risk.overall_risk_rating === 'High' ? 'badge-red' : risk.overall_risk_rating === 'Medium' ? 'badge-orange' : 'badge-green'}">
+                    Overall Risk: ${risk.overall_risk_rating || 'N/A'}
+                </span>
+            </div>
+            ${risk.risk_summary ? `<p class="summary-text" style="margin-bottom:16px">${risk.risk_summary}</p>` : ''}
+            ${renderRiskItems(risk.risk_factors)}
+        </div>
+
+        <div class="tab-actions-bar">
+            <button class="btn btn-primary" onclick="downloadReport('${jobId}', ${isHistorical})">
+                <i data-lucide="download" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> Download DOCX
+            </button>
+            ${!isHistorical ? `<button class="btn btn-accent" onclick="saveReport('${jobId}')" id="saveReportBtn"><i data-lucide="bookmark" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> Save to History</button>` : ''}
+            <button class="btn btn-ghost" onclick="newAnalysis()" style="border:1px solid var(--border)">
+                <i data-lucide="plus-circle" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> New Analysis
+            </button>
+        </div>
+    `;
+
+    // TAB 2: Extracted Financial (ratios + financial tables)
+    const extractedFinancialContent = `
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="bar-chart-2" style="width:20px"></i></span> Financial Ratios</h3>
+            ${renderRatioTables(ratios)}
+        </div>
+
+        ${fin.revenue_trend ? `
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="trending-up" style="width:20px"></i></span> Revenue & Profitability</h3>
+            <p class="summary-text">${fin.revenue_trend || ''}</p>
+            ${fin.margin_analysis ? `<p class="summary-text" style="margin-top:12px">${fin.margin_analysis}</p>` : ''}
+        </div>` : ''}
+
+        ${fin.cash_flow_analysis ? `
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="dollar-sign" style="width:20px"></i></span> Cash Flow Analysis</h3>
+            <p class="summary-text">${fin.cash_flow_analysis}</p>
+        </div>` : ''}
+
+        ${fin.balance_sheet_analysis ? `
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="layers" style="width:20px"></i></span> Balance Sheet</h3>
+            <p class="summary-text">${fin.balance_sheet_analysis}</p>
+        </div>` : ''}
+    `;
+
+    // TAB 3: Projected Financials
+    let projectedContent = '';
+    if (proj.review_table && proj.review_table.length) {
+        const credibilityColor = {
+            'Optimistic': 'badge-red', 'Realistic': 'badge-green',
+            'Conservative': 'badge-blue', 'Mixed': 'badge-orange',
+        };
+        projectedContent = `
+        <div class="section-card">
+            <h3><span class="icon"><i data-lucide="trending-up" style="width:20px"></i></span> Management Projection Review</h3>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                <span class="badge ${credibilityColor[proj.overall_credibility] || 'badge-orange'}">
+                    Overall: ${proj.overall_credibility || 'N/A'}
+                </span>
+                ${proj.projection_period ? `<span style="font-size:12px;color:var(--text-muted)">Period: ${proj.projection_period}</span>` : ''}
+            </div>
+            ${proj.overall_credibility_summary ? `<p class="summary-text" style="margin-bottom:16px">${proj.overall_credibility_summary}</p>` : ''}
+
+            ${proj.management_assumptions && proj.management_assumptions.length ? `
+            <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Management Assumptions</h4>
+            <ul class="bullet-list" style="margin-bottom:20px">
+                ${proj.management_assumptions.map(a => `<li>${a}</li>`).join('')}
+            </ul>` : ''}
+
+            <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Projection Review</h4>
+            <div class="excel-table-container" style="margin-bottom:24px">
+                <table class="excel-table">
+                    <thead><tr>
+                        <th>Metric</th><th>Management Projection</th>
+                        <th>Historical Baseline</th><th>Credibility</th><th>Rationale</th>
+                    </tr></thead>
+                    <tbody>
+                        ${proj.review_table.map(row => {
+                            const cClass = row.credibility === 'Realistic' ? 'status-pass' : row.credibility === 'Optimistic' ? 'status-fail' : 'status-caution';
+                            return `<tr>
+                                <td style="font-weight:600">${row.metric}${row.risk_flag ? ' ⚠️' : ''}</td>
+                                <td>${row.management_projection || '—'}</td>
+                                <td style="color:var(--text-muted)">${row.historical_baseline || '—'}</td>
+                                <td class="${cClass}">${row.credibility || '—'}</td>
+                                <td style="font-size:12px;color:var(--text-secondary)">${row.credibility_reason || '—'}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+
+            ${proj.key_concerns && proj.key_concerns.length ? `
+            <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Key Concerns</h4>
+            <ul class="bullet-list" style="margin-bottom:20px">
+                ${proj.key_concerns.map(c => `<li style="color:var(--danger)">${c}</li>`).join('')}
+            </ul>` : ''}
+
+            ${proj.ai_counter_projection ? (() => {
+                const cp = proj.ai_counter_projection;
+                return `
+            <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px">
+                <h4 style="font-size:14px;font-weight:700;margin-bottom:6px">🤖 AI Counter-Projection</h4>
+                ${cp.methodology ? `<p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${cp.methodology}</p>` : ''}
+                ${cp.projections && cp.projections.length ? `
+                <div class="excel-table-container" style="margin-bottom:16px">
+                    <table class="excel-table">
+                        <thead><tr>
+                            <th>Metric</th>
+                            ${cp.projections[0].year_by_year ? cp.projections[0].year_by_year.map(y => `<th>${y.year}</th>`).join('') : ''}
+                        </tr></thead>
+                        <tbody>
+                            ${cp.projections.map(p => `
+                            <tr>
+                                <td style="font-weight:600">${p.metric}</td>
+                                ${(p.year_by_year || []).map(y => `<td title="${y.reasoning || ''}">${y.value || '—'}</td>`).join('')}
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>` : ''}
+                ${cp.summary ? `<p class="summary-text">${cp.summary}</p>` : ''}
+            </div>`;
+            })() : ''}
+        </div>`;
+    } else {
+        projectedContent = `
+        <div class="projected-empty-state">
+            <i data-lucide="file-question" style="width:48px;height:48px;opacity:0.3;margin-bottom:16px"></i>
+            <p style="color:var(--text-muted);font-size:14px">No projection data available for this analysis.</p>
+            <p style="color:var(--text-muted);font-size:12px;margin-top:8px">Upload company projection files before starting an analysis to see management projection review here.</p>
+        </div>`;
+    }
+
+    // ── Assemble the full layout ──────────────────────────────────────────────
+    const html = `
+    <div class="analysis-page-header">
+        <div class="analysis-page-title">
+            <h2>${result.company_name || 'Financial Analysis'}</h2>
+            <p class="analysis-page-subtitle">Following companies Analysis</p>
         </div>
     </div>
 
-    <!-- Verdict -->
-    <div class="verdict-card ${verdictClass}">
-        <div class="verdict-label">Investment Recommendation</div>
-        <div class="verdict-value ${verdictClass}">${verdict}</div>
-        <div class="summary-text" style="max-width:600px;margin:0 auto">${rec.summary || ''}</div>
-        <div class="verdict-meta">
-            <div class="v-meta-item">
-                <div class="label">Confidence</div>
-                <div class="value">${rec.confidence_level || 'N/A'}</div>
-            </div>
-            <div class="v-meta-item">
-                <div class="label">Horizon</div>
-                <div class="value">${rec.target_horizon || 'N/A'}</div>
-            </div>
-            <div class="v-meta-item">
-                <div class="label">Suitable For</div>
-                <div class="value">${rec.suitable_for || 'N/A'}</div>
-            </div>
+    <div class="analysis-tab-cards">
+        <div class="analysis-tab-card active" id="tabCard-final" onclick="switchAnalysisTab('final')">
+            <div class="tab-card-icon"><i data-lucide="file-text"></i></div>
+            <div class="tab-card-label">Final Doc</div>
         </div>
-    </div>`;
-
-    // Executive Summary
-    html += `
-    <div class="section-card">
-        <h3><span class="icon"><i data-lucide="clipboard-list" style="width: 20px;"></i></span> Executive Summary</h3>
-        <p class="summary-text">${fin.executive_summary || 'N/A'}</p>
-        ${fin.key_highlights ? `
-        <ul class="bullet-list" style="margin-top:14px">
-            ${fin.key_highlights.map(h => `<li>${h}</li>`).join('')}
-        </ul>` : ''}
-    </div>`;
-
-    // Background
-    html += `
-    <div class="section-card">
-        <h3><span class="icon"><i data-lucide="building" style="width: 20px;"></i></span> Company Background</h3>
-        <div class="info-grid">
-            <div class="info-item"><div class="label">Industry</div><div class="value">${bg.industry || 'N/A'}</div></div>
-            <div class="info-item"><div class="label">Sub-Industry</div><div class="value">${bg.sub_industry || 'N/A'}</div></div>
-            <div class="info-item"><div class="label">Headquarters</div><div class="value">${bg.headquarters || 'N/A'}</div></div>
-            <div class="info-item"><div class="label">Business Model</div><div class="value">${bg.business_model || 'N/A'}</div></div>
+        <div class="analysis-tab-card" id="tabCard-extracted" onclick="switchAnalysisTab('extracted')">
+            <div class="tab-card-icon"><i data-lucide="bar-chart-2"></i></div>
+            <div class="tab-card-label">Extracted Financial</div>
         </div>
-        ${bg.company_description ? `<p class="summary-text" style="margin-top:16px">${bg.company_description}</p>` : ''}
-    </div>`;
-
-    // Ratios
-    html += `
-    <div class="section-card">
-        <h3><span class="icon"><i data-lucide="bar-chart-2" style="width: 20px;"></i></span> Financial Ratios</h3>
-        ${renderRatioTables(ratios)}
-    </div>`;
-
-    // Projection Analysis (only shown if projections were uploaded and analysed)
-    const proj = result.projection_analysis || {};
-    if (proj.review_table && proj.review_table.length) {
-        const credibilityColor = {
-            'Optimistic': 'badge-red',
-            'Realistic':  'badge-green',
-            'Conservative': 'badge-blue',
-            'Mixed': 'badge-orange',
-        };
-        html += `
-    <div class="section-card">
-        <h3><span class="icon"><i data-lucide="trending-up" style="width: 20px;"></i></span> Management Projection Review</h3>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-            <span class="badge ${credibilityColor[proj.overall_credibility] || 'badge-orange'}">
-                Overall: ${proj.overall_credibility || 'N/A'}
-            </span>
-            ${proj.projection_period ? `<span style="font-size:12px;color:var(--text-muted)">Period: ${proj.projection_period}</span>` : ''}
+        <div class="analysis-tab-card" id="tabCard-projected" onclick="switchAnalysisTab('projected')">
+            <div class="tab-card-icon"><i data-lucide="trending-up"></i></div>
+            <div class="tab-card-label">Projected Financials</div>
         </div>
-        ${proj.overall_credibility_summary ? `<p class="summary-text" style="margin-bottom:16px">${proj.overall_credibility_summary}</p>` : ''}
+    </div>
 
-        <!-- Assumptions -->
-        ${proj.management_assumptions && proj.management_assumptions.length ? `
-        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Management Assumptions</h4>
-        <ul class="bullet-list" style="margin-bottom:20px">
-            ${proj.management_assumptions.map(a => `<li>${a}</li>`).join('')}
-        </ul>` : ''}
-
-        <!-- Review Table -->
-        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Projection Review</h4>
-        <div class="excel-table-container" style="margin-bottom:24px">
-            <table class="excel-table">
-                <thead>
-                    <tr>
-                        <th>Metric</th>
-                        <th>Management Projection</th>
-                        <th>Historical Baseline</th>
-                        <th>Credibility</th>
-                        <th>Rationale</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${proj.review_table.map(row => {
-                        const cClass = row.credibility === 'Realistic' ? 'status-pass' : row.credibility === 'Optimistic' ? 'status-fail' : 'status-caution';
-                        const flagIcon = row.risk_flag ? ' ⚠️' : '';
-                        return `<tr>
-                            <td style="font-weight:600">${row.metric}${flagIcon}</td>
-                            <td>${row.management_projection || '—'}</td>
-                            <td style="color:var(--text-muted)">${row.historical_baseline || '—'}</td>
-                            <td class="${cClass}">${row.credibility || '—'}</td>
-                            <td style="font-size:12px;color:var(--text-secondary)">${row.credibility_reason || '—'}</td>
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Key Concerns -->
-        ${proj.key_concerns && proj.key_concerns.length ? `
-        <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Key Concerns</h4>
-        <ul class="bullet-list" style="margin-bottom:20px">
-            ${proj.key_concerns.map(c => `<li style="color:var(--danger)">${c}</li>`).join('')}
-        </ul>` : ''}
-
-        <!-- AI Counter-Projection -->
-        ${proj.ai_counter_projection ? (() => {
-            const cp = proj.ai_counter_projection;
-            return `
-        <div style="border-top:1px solid var(--border);padding-top:20px;margin-top:4px">
-            <h4 style="font-size:14px;font-weight:700;margin-bottom:6px">🤖 AI Counter-Projection</h4>
-            ${cp.methodology ? `<p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">${cp.methodology}</p>` : ''}
-            ${cp.projections && cp.projections.length ? `
-            <div class="excel-table-container" style="margin-bottom:16px">
-                <table class="excel-table">
-                    <thead>
-                        <tr>
-                            <th>Metric</th>
-                            ${cp.projections[0].year_by_year ? cp.projections[0].year_by_year.map(y => `<th>${y.year}</th>`).join('') : ''}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${cp.projections.map(p => `
-                        <tr>
-                            <td style="font-weight:600">${p.metric}</td>
-                            ${(p.year_by_year || []).map(y => `<td title="${y.reasoning || ''}">${y.value || '—'}</td>`).join('')}
-                        </tr>`).join('')}
-                    </tbody>
-                </table>
-            </div>` : ''}
-            ${cp.summary ? `<p class="summary-text">${cp.summary}</p>` : ''}
-        </div>`;
-        })() : ''}
-    </div>`;
-    }
-
-    // Risk Factors
-    html += `
-    <div class="section-card">
-        <h3><span class="icon">⚠️</span> Risk Factors</h3>
-        <div style="margin-bottom:16px">
-            <span class="badge ${risk.overall_risk_rating === 'High' ? 'badge-red' : risk.overall_risk_rating === 'Medium' ? 'badge-orange' : 'badge-green'}">
-                Overall Risk: ${risk.overall_risk_rating || 'N/A'}
-            </span>
-        </div>
-        ${risk.risk_summary ? `<p class="summary-text" style="margin-bottom:16px">${risk.risk_summary}</p>` : ''}
-        ${renderRiskItems(risk.risk_factors)}
-    </div>`;
+    <div class="analysis-tab-content" id="tabContent-final">${finalDocContent}</div>
+    <div class="analysis-tab-content" id="tabContent-extracted" style="display:none">${extractedFinancialContent}</div>
+    <div class="analysis-tab-content" id="tabContent-projected" style="display:none">${projectedContent}</div>
+    `;
 
     resultsSection.innerHTML = html;
+    lucide.createIcons();
 }
+
+function switchAnalysisTab(tab) {
+    ['final', 'extracted', 'projected'].forEach(t => {
+        const card = document.getElementById(`tabCard-${t}`);
+        const content = document.getElementById(`tabContent-${t}`);
+        if (card) card.classList.toggle('active', t === tab);
+        if (content) content.style.display = t === tab ? 'block' : 'none';
+    });
+    lucide.createIcons();
+}
+window.switchAnalysisTab = switchAnalysisTab;
+
+
 
 function renderRatioTables(ratios) {
     if (!ratios || Object.keys(ratios).length === 0) return '<p class="summary-text">No ratios calculated.</p>';
