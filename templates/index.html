@@ -7,7 +7,9 @@
     <meta name="description" content="AI-powered financial statement analysis with user profiles and history.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=16">
+    <link rel="stylesheet" href="/static/style.css?v=17">
+    <!-- Lenis premium smooth scroll -->
+    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
 </head>
 <body>
 
@@ -400,6 +402,60 @@
 
 <script>
     lucide.createIcons();
+
+    // ── Lenis Smooth Scroll ─────────────────────────────────────────────────
+    const lenis = new Lenis({
+        duration: 1.2,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        direction: 'vertical',
+        smooth: true,
+        smoothTouch: false,
+        touchMultiplier: 2,
+    });
+
+    function raf(time) {
+        lenis.raf(time);
+        requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+
+    // ── Scroll-Reveal Entrance Animations ──────────────────────────────────
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('scroll-visible');
+                revealObserver.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+    function observeRevealElements() {
+        document.querySelectorAll(
+            '.section-card, .verdict-card, .analysis-tab-card, .history-item, '
+          + '.inprogress-item, .wizard-panel.active .form-group, '
+          + '.wizard-panel.active .option-card, .analysis-page-header'
+        ).forEach(el => {
+            if (!el.classList.contains('scroll-visible')) {
+                el.classList.add('scroll-hidden');
+                revealObserver.observe(el);
+            }
+        });
+    }
+
+    // Re-observe after any dynamic content renders
+    const _origSetInner = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    let _revealTimer;
+    const _triggerReveal = () => {
+        clearTimeout(_revealTimer);
+        _revealTimer = setTimeout(observeRevealElements, 120);
+    };
+
+    // Watch for DOM mutations (e.g. results section rendered)
+    new MutationObserver(_triggerReveal).observe(document.body, {
+        childList: true, subtree: true, attributes: false
+    });
+
+    observeRevealElements();
 </script>
 </body>
 </html>
