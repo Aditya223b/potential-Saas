@@ -63,7 +63,6 @@
 
 html {
   scroll-behavior: smooth;
-  /* Lenis overrides this — kept for non-JS fallback */
 }
 
 body {
@@ -835,6 +834,7 @@ h1, h2, h3, h4 {
 .main-content {
   flex: 1;
   overflow-y: auto;
+  scroll-behavior: smooth;
   padding: 28px 32px;
   background: var(--bg-primary);
   position: relative;
