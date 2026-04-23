@@ -246,6 +246,7 @@ def generate_report(analysis: dict, output_dir: str = ".") -> str:
     comp_data = analysis.get("competitor_analysis", {})
     computed_ratios = analysis.get("computed_ratios", {})
     growth = analysis.get("growth_metrics", {})
+    proj = analysis.get("projection_analysis", {})
 
     csym = "₹"
     verdict = rec.get("recommendation", "N/A")
@@ -611,7 +612,92 @@ def generate_report(analysis: dict, output_dir: str = ".") -> str:
             doc.add_paragraph(c, style="List Bullet")
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # 13. DISCLAIMER
+    # 13. PROJECTION ANALYSIS
+    # ═══════════════════════════════════════════════════════════════════════════
+    if proj and proj.get("review_table"):
+        doc.add_page_break()
+        _section_heading(doc, "Management Projection Analysis")
+
+        # Credibility badge line
+        cred = proj.get("overall_credibility", "N/A")
+        period = proj.get("projection_period", "")
+        cred_line = doc.add_paragraph()
+        cred_color = GREEN if cred == "Realistic" else RED if cred == "Optimistic" else ORANGE
+        cred_line.paragraph_format.space_after = Pt(6)
+        _run(cred_line, f"Overall Credibility: ", size=11, bold=True, color=NAVY)
+        _run(cred_line, cred, size=11, bold=True, color=cred_color)
+        if period:
+            _run(cred_line, f"  •  Period: {period}", size=11, color=MUTED)
+
+        if proj.get("overall_credibility_summary"):
+            _add_body(doc, proj["overall_credibility_summary"])
+
+        # Management assumptions
+        assumptions = proj.get("management_assumptions", [])
+        if assumptions:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(10)
+            _run(p, "Management Assumptions:", size=12, bold=True, color=NAVY)
+            for a in assumptions:
+                doc.add_paragraph(a, style="List Bullet")
+
+        # Projection review table
+        review_table = proj.get("review_table", [])
+        if review_table:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(12)
+            _run(p, "Projection Review:", size=12, bold=True, color=NAVY)
+            headers = ["Metric", "Management Projection", "Historical Baseline", "Credibility", "Rationale"]
+            rows = []
+            for row in review_table:
+                flag = " ⚠" if row.get("risk_flag") else ""
+                cred_val = row.get("credibility", "—")
+                rows.append([
+                    row.get("metric", "—") + flag,
+                    row.get("management_projection", "—"),
+                    row.get("historical_baseline", "—"),
+                    cred_val,
+                    (row.get("credibility_reason", "—") or "—")[:120],
+                ])
+            _data_table(doc, headers, rows, [4, 3, 3, 2.5, 5])
+
+        # Key concerns
+        concerns = proj.get("key_concerns", [])
+        if concerns:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(10)
+            _run(p, "Key Concerns:", size=12, bold=True, color=RED)
+            for c in concerns:
+                doc.add_paragraph(f"⚠  {c}", style="List Bullet")
+
+        # AI Counter-Projection
+        cp = proj.get("ai_counter_projection", {})
+        if cp:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(14)
+            _run(p, "AI Counter-Projection", size=13, bold=True, color=NAVY)
+            if cp.get("methodology"):
+                _add_body(doc, cp["methodology"])
+            cp_rows = cp.get("projections", [])
+            if cp_rows:
+                # Build a year-keyed table
+                years_cp = cp_rows[0].get("year_by_year", []) if cp_rows else []
+                yr_labels = [y.get("year", "") for y in years_cp]
+                cp_headers = ["Metric"] + yr_labels
+                cp_table_rows = []
+                for item in cp_rows:
+                    row = [item.get("metric", "—")]
+                    for y in item.get("year_by_year", []):
+                        row.append(y.get("value", "—"))
+                    cp_table_rows.append(row)
+                if cp_table_rows:
+                    col_w_cp = [5.5] + [3] * len(yr_labels)
+                    _data_table(doc, cp_headers, cp_table_rows, col_w_cp)
+            if cp.get("summary"):
+                _add_body(doc, cp["summary"])
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # 14. DISCLAIMER
     # ═══════════════════════════════════════════════════════════════════════════
     doc.add_paragraph()
     _section_heading(doc, "Disclaimer")

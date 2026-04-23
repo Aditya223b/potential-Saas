@@ -762,6 +762,15 @@ function renderResultsView(result, jobId, isHistorical = false) {
             <h3><span class="icon"><i data-lucide="layers" style="width:20px"></i></span> Balance Sheet</h3>
             <p class="summary-text">${fin.balance_sheet_analysis}</p>
         </div>` : ''}
+
+        <div class="tab-actions-bar">
+            <button class="btn btn-primary" onclick="downloadExtractionData('${jobId}')">
+                <i data-lucide="download" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> Download Extractions
+            </button>
+            <button class="btn btn-ghost" onclick="newAnalysis()" style="border:1px solid var(--border)">
+                <i data-lucide="plus-circle" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> New Analysis
+            </button>
+        </div>
     `;
 
     // TAB 3: Projected Financials
@@ -841,6 +850,15 @@ function renderResultsView(result, jobId, isHistorical = false) {
                 ${cp.summary ? `<p class="summary-text">${cp.summary}</p>` : ''}
             </div>`;
             })() : ''}
+        </div>
+
+        <div class="tab-actions-bar">
+            <button class="btn btn-primary" onclick="downloadProjectionData('${jobId}')">
+                <i data-lucide="download" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> Download Projections
+            </button>
+            <button class="btn btn-ghost" onclick="newAnalysis()" style="border:1px solid var(--border)">
+                <i data-lucide="plus-circle" style="width:14px;margin-right:6px;vertical-align:text-bottom"></i> New Analysis
+            </button>
         </div>`;
     } else {
         projectedContent = `
@@ -1399,6 +1417,54 @@ async function downloadReport(id, isHistorical) {
     }
 }
 window.downloadReport = downloadReport;
+
+async function downloadProjectionData(jobId) {
+    try {
+        const res = await authFetch(`/api/result/${jobId}`);
+        const data = await res.json();
+        if (!data.result) { showToast('No data to download.', 'error'); return; }
+
+        const proj = data.result.projection_analysis || {};
+        const company = (data.result.company_name || 'analysis').replace(/[^a-z0-9]/gi, '_');
+        const blob = new Blob([JSON.stringify(proj, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${company}_Projections.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        showToast('Failed to download projections.', 'error');
+    }
+}
+window.downloadProjectionData = downloadProjectionData;
+
+async function downloadExtractionData(jobId) {
+    try {
+        const res = await authFetch(`/api/result/${jobId}`);
+        const data = await res.json();
+        if (!data.result) { showToast('No data to download.', 'error'); return; }
+
+        const company = (data.result.company_name || 'analysis').replace(/[^a-z0-9]/gi, '_');
+        const extractionPayload = {
+            company_name: data.result.company_name,
+            financials: data.result.financials,
+            financial_analysis: data.result.financial_analysis,
+            computed_ratios: data.result.computed_ratios,
+            growth_metrics: data.result.growth_metrics,
+        };
+        const blob = new Blob([JSON.stringify(extractionPayload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${company}_Extractions.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        showToast('Failed to download extractions.', 'error');
+    }
+}
+window.downloadExtractionData = downloadExtractionData;
 
 async function emailReport() {
     const email = document.getElementById('modalEmailInput').value.trim();
