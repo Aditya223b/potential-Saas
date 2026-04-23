@@ -6,6 +6,7 @@ let _isLoginMode = true;
 let selectedFiles = [];
 let selectedProjectionFiles = [];
 let _currentJobId = null; // Renamed from currentJobId for consistency
+let _currentResult = null; // Cached result for tab downloads
 let historyAnalyses = [];
 
 const SUPABASE_URL = 'https://hattlirxjifrbmmwwytj.supabase.co';
@@ -664,6 +665,7 @@ async function loadResults(jobId) {
 }
 
 function renderResultsView(result, jobId, isHistorical = false) {
+    _currentResult = result; // cache for tab-level downloads
     const rec = result.recommendation || {};
     const bg = result.company_background || {};
     const fin = result.financial_analysis || {};
@@ -1419,50 +1421,44 @@ async function downloadReport(id, isHistorical) {
 window.downloadReport = downloadReport;
 
 async function downloadProjectionData(jobId) {
-    try {
-        const res = await authFetch(`/api/result/${jobId}`);
-        const data = await res.json();
-        if (!data.result) { showToast('No data to download.', 'error'); return; }
+    const result = _currentResult;
+    if (!result) { showToast('No data to download.', 'error'); return; }
 
-        const proj = data.result.projection_analysis || {};
-        const company = (data.result.company_name || 'analysis').replace(/[^a-z0-9]/gi, '_');
-        const blob = new Blob([JSON.stringify(proj, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${company}_Projections.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    } catch (e) {
-        showToast('Failed to download projections.', 'error');
+    const proj = result.projection_analysis || {};
+    if (!proj || Object.keys(proj).length === 0) {
+        showToast('No projection data available for this analysis.', 'error');
+        return;
     }
+    const company = (result.company_name || 'analysis').replace(/[^a-z0-9]/gi, '_');
+    const blob = new Blob([JSON.stringify(proj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${company}_Projections.json`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 window.downloadProjectionData = downloadProjectionData;
 
 async function downloadExtractionData(jobId) {
-    try {
-        const res = await authFetch(`/api/result/${jobId}`);
-        const data = await res.json();
-        if (!data.result) { showToast('No data to download.', 'error'); return; }
+    const result = _currentResult;
+    if (!result) { showToast('No data to download.', 'error'); return; }
 
-        const company = (data.result.company_name || 'analysis').replace(/[^a-z0-9]/gi, '_');
-        const extractionPayload = {
-            company_name: data.result.company_name,
-            financials: data.result.financials,
-            financial_analysis: data.result.financial_analysis,
-            computed_ratios: data.result.computed_ratios,
-            growth_metrics: data.result.growth_metrics,
-        };
-        const blob = new Blob([JSON.stringify(extractionPayload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${company}_Extractions.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    } catch (e) {
-        showToast('Failed to download extractions.', 'error');
-    }
+    const company = (result.company_name || 'analysis').replace(/[^a-z0-9]/gi, '_');
+    const extractionPayload = {
+        company_name: result.company_name,
+        financials: result.financials,
+        financial_analysis: result.financial_analysis,
+        computed_ratios: result.computed_ratios,
+        growth_metrics: result.growth_metrics,
+    };
+    const blob = new Blob([JSON.stringify(extractionPayload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${company}_Extractions.json`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 window.downloadExtractionData = downloadExtractionData;
 
