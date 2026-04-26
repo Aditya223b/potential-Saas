@@ -739,11 +739,31 @@ function renderResultsView(result, jobId, isHistorical = false) {
         </div>
     `;
 
-    // TAB 2: Extracted Financial (ratios + financial tables)
+    // TAB 2: Extracted Financial (interactive figures table with source previews)
+    const financials = result.financials || {};
+    const extractionSources = financials.sources || {};
+    const sortedYears = (financials.years_found || []).slice().sort();
+
     const extractedFinancialContent = `
         <div class="section-card">
             <h3><span class="icon"><i data-lucide="bar-chart-2" style="width:20px"></i></span> Financial Ratios</h3>
             ${renderRatioTables(ratios)}
+        </div>
+
+        <div class="section-card">
+            <h3 style="margin-bottom:6px"><span class="icon"><i data-lucide="table" style="width:20px"></i></span> Extracted Financial Figures</h3>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Click any row to see the source PDF excerpt where the value was found.</p>
+            <div class="extraction-split-view">
+                <div class="extraction-table-panel">
+                    ${renderExtractedFiguresTable(financials, sortedYears, extractionSources, jobId)}
+                </div>
+                <div class="extraction-preview-panel" id="sourcePreviewPanel">
+                    <div class="source-preview-empty">
+                        <i data-lucide="scan-eye" style="width:40px;height:40px;display:block;margin:0 auto 12px"></i>
+                        <p>Click a row to see the PDF source</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         ${fin.revenue_trend ? `
@@ -989,6 +1009,161 @@ function renderRiskItems(risks) {
         </div>
     `).join('');
 }
+
+// ── Extracted Figures Table with Source Preview ──────────────
+function _fmtExtVal(v) {
+    if (v === null || v === undefined) return '—';
+    const n = Number(v);
+    if (isNaN(n)) return String(v);
+    if (n === 0) return '—';
+    const abs = Math.abs(n);
+    if (abs >= 1_00_00_000) return `₹${(n / 1_00_00_000).toFixed(2)} Cr`;
+    if (abs >= 1_00_000)    return `₹${(n / 1_00_000).toFixed(2)} L`;
+    return `₹${n.toLocaleString('en-IN')}`;
+}
+
+function renderExtractedFiguresTable(financials, sortedYears, sources, jobId) {
+    if (!sortedYears.length) return '<p class="summary-text">No extracted figures available.</p>';
+
+    const sections = [
+        { label: 'Profit & Loss', fields: [
+            ['Revenue', 'revenue'], ['Other Income', 'other_income'], ['Total Income', 'total_income'],
+            ['Cost of Materials', 'cost_of_materials'], ['Employee Expense', 'employee_expense'],
+            ['Depreciation', 'depreciation'], ['Finance Cost', 'finance_cost'],
+            ['Other Expenses', 'other_expenses'], ['Total Expenses', 'total_expenses'],
+            ['Profit Before Tax', 'profit_before_tax'], ['Tax Expense', 'tax_expense'],
+            ['Net Profit', 'net_profit'], ['EBITDA', 'ebitda'],
+        ]},
+        { label: 'Balance Sheet', fields: [
+            ['Share Capital', 'share_capital'], ['Reserves & Surplus', 'reserves'],
+            ['Equity (Net Worth)', 'equity'], ['Long Term Borrowings', 'long_term_borrowings'],
+            ['Short Term Borrowings', 'short_term_borrowings'], ['Total Debt', 'total_debt'],
+            ['Trade Payables', 'trade_payables'], ['Current Liabilities', 'current_liabilities_total'],
+            ['Tangible Assets', 'tangible_assets'], ['Trade Receivables', 'trade_receivables'],
+            ['Cash & Equivalents', 'cash_and_equivalents'], ['Inventories', 'inventories'],
+            ['Current Assets', 'current_assets_total'], ['Total Assets', 'total_assets'],
+            ['Working Capital', 'working_capital'],
+        ]},
+        { label: 'Cash Flow', fields: [
+            ['Operating Cash Flow', 'operating_cash_flow'],
+            ['Investing Cash Flow', 'investing_cash_flow'],
+            ['Financing Cash Flow', 'financing_cash_flow'],
+        ]},
+    ];
+
+    let html = '<table class="extracted-figures-table"><thead><tr>';
+    html += '<th>Particulars</th>';
+    sortedYears.forEach(yr => { html += `<th>${yr}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    for (const section of sections) {
+        html += `<tr class="section-header-row"><td colspan="${1 + sortedYears.length}">${section.label}</td></tr>`;
+        for (const [label, key] of section.fields) {
+            // Check if any year has a non-zero value for this field
+            let hasValue = false;
+            for (const yr of sortedYears) {
+                const yrData = financials[yr];
+                if (yrData && typeof yrData === 'object' && yrData[key]) { hasValue = true; break; }
+            }
+            if (!hasValue) continue; // skip rows that are all zeros/null
+
+            // Use the first year that has source info for click action
+            let clickYear = sortedYears[0];
+            for (const yr of sortedYears) {
+                if (sources[yr] && sources[yr][key]) { clickYear = yr; break; }
+            }
+            const hasSource = sources[clickYear] && sources[clickYear][key];
+
+            html += `<tr data-field="${key}" data-year="${clickYear}" data-job="${jobId}"
+                         onclick="showSourcePreview(this, '${jobId}', '${clickYear}', '${key}')"
+                         title="${hasSource ? 'Click to view source' : 'No source reference available'}">`;
+            html += `<td>${label}${hasSource ? '<span class="source-badge"><i data-lucide="eye" style="width:10px"></i> Source</span>' : ''}</td>`;
+            for (const yr of sortedYears) {
+                const yrData = financials[yr];
+                const val = (yrData && typeof yrData === 'object') ? yrData[key] : null;
+                html += `<td>${_fmtExtVal(val)}</td>`;
+            }
+            html += '</tr>';
+        }
+    }
+
+    html += '</tbody></table>';
+    return html;
+}
+
+async function showSourcePreview(rowEl, jobId, year, field) {
+    // Highlight the clicked row
+    document.querySelectorAll('.extracted-figures-table tbody tr.source-active').forEach(r => r.classList.remove('source-active'));
+    if (rowEl) rowEl.classList.add('source-active');
+
+    const panel = document.getElementById('sourcePreviewPanel');
+    if (!panel) return;
+
+    // Show loading state
+    panel.innerHTML = `
+        <div class="source-preview-card">
+            <div class="source-preview-header">
+                <h4>${field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</h4>
+                <span class="source-meta">${year}</span>
+            </div>
+            <div class="source-preview-image-wrap">
+                <div class="loading-shimmer"></div>
+            </div>
+        </div>`;
+
+    // First check if we have inline source data from the result (for historical analyses)
+    const inlineSources = (_currentResult?.financials?.sources || {})[year] || {};
+    const inlineSource = inlineSources[field] || {};
+
+    // Try the live API endpoint first (works for active Redis jobs)
+    try {
+        const res = await authFetch(`/api/source-preview/${jobId}?year=${encodeURIComponent(year)}&field=${encodeURIComponent(field)}`);
+        if (res.ok) {
+            const data = await res.json();
+            const excerpt = data.preview?.excerpt || inlineSource.excerpt || '';
+            const sourceFile = data.preview?.source_file || inlineSource.source_file || '';
+            const pageNum = data.preview?.page_number || inlineSource.page_number || '';
+            const imageUrl = data.image_data_url || '';
+
+            panel.innerHTML = `
+                <div class="source-preview-card">
+                    <div class="source-preview-header">
+                        <h4>${field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</h4>
+                        <span class="source-meta">${sourceFile ? `${sourceFile}` : ''}${pageNum ? ` • p.${pageNum}` : ''}</span>
+                    </div>
+                    ${imageUrl ? `
+                    <div class="source-preview-image-wrap">
+                        <img src="${imageUrl}" alt="Source preview for ${field}" />
+                    </div>` : ''}
+                    ${excerpt ? `<div class="source-preview-excerpt">"${excerpt}"</div>` : ''}
+                    ${!imageUrl && !excerpt ? '<div class="source-preview-empty"><p>Source reference recorded but no image preview available.</p></div>' : ''}
+                </div>`;
+            return;
+        }
+    } catch(e) {
+        // API call failed — fall through to inline sources
+    }
+
+    // Fallback: render from inline source data (historical analyses without Redis state)
+    if (inlineSource.excerpt || inlineSource.source_file) {
+        panel.innerHTML = `
+            <div class="source-preview-card">
+                <div class="source-preview-header">
+                    <h4>${field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</h4>
+                    <span class="source-meta">${inlineSource.source_file || ''}${inlineSource.page_number ? ` • p.${inlineSource.page_number}` : ''}</span>
+                </div>
+                ${inlineSource.excerpt ? `<div class="source-preview-excerpt">"${inlineSource.excerpt}"</div>` : ''}
+            </div>`;
+    } else {
+        panel.innerHTML = `
+            <div class="source-preview-empty">
+                <i data-lucide="file-x" style="width:40px;height:40px;display:block;margin:0 auto 12px"></i>
+                <p>No source reference available for this field.</p>
+            </div>`;
+        lucide.createIcons();
+    }
+}
+window.showSourcePreview = showSourcePreview;
 
 // ── Sidebar: In-Progress Jobs ───────────────────────────────
 
