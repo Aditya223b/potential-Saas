@@ -238,6 +238,28 @@ def get_bin_analyses(user_id: str, limit: int = 50) -> list[dict]:
         return []
 
 
+def update_analysis_data(analysis_id: str, user_id: str, analysis_data: dict) -> bool:
+    """
+    Update the analysis_data for a completed analysis.
+    Scoped by user_id for security (only the owner can edit).
+    """
+    try:
+        result = (
+            _get_admin_client().table("analyses")
+            .update({"analysis_data": analysis_data})
+            .eq("id", analysis_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            print(f"  ✅ Analysis {analysis_id} updated in Supabase")
+            return True
+        return False
+    except Exception as e:
+        print(f"  ⚠️  Failed to update analysis {analysis_id}: {e}")
+        return False
+
+
 def get_analysis(analysis_id: str, user_id: str) -> dict | None:
     """
     Fetch a single analysis by ID. RLS ensures user ownership.

@@ -1267,6 +1267,42 @@ def my_analyses():
     return jsonify({"analyses": analyses})
 
 
+@app.route("/api/update-financials/<identifier>", methods=["PATCH"])
+@require_auth
+def update_financials(identifier):
+    """
+    Update the financials within a completed analysis.
+    'identifier' can be either a Redis job_id or a Supabase analysis_id.
+    """
+    data = request.get_json()
+    updated_financials = data.get("financials")
+    if not updated_financials:
+        return jsonify({"error": "No financials payload provided"}), 400
+
+    user_id = g.user["id"]
+
+    # Try Redis job first (active job)
+    job = get_job_object(identifier)
+    if job and job.result:
+        job.result["financials"] = updated_financials
+        job._persist_async()
+        logger.info(f"[{identifier}] Financials updated in Redis job")
+        return jsonify({"ok": True, "source": "redis"})
+
+    # Otherwise try Supabase analysis
+    from supabase_client import get_analysis, update_analysis_data
+    analysis = get_analysis(identifier, user_id)
+    if analysis:
+        analysis_data = analysis.get("analysis_data", {})
+        analysis_data["financials"] = updated_financials
+        success = update_analysis_data(identifier, user_id, analysis_data)
+        if success:
+            return jsonify({"ok": True, "source": "supabase"})
+        return jsonify({"error": "Failed to update analysis"}), 500
+
+    return jsonify({"error": "Analysis not found"}), 404
+
+
 @app.route("/api/my-analyses/<analysis_id>")
 @require_auth
 def my_analysis_detail(analysis_id):

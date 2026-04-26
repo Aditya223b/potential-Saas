@@ -1081,7 +1081,8 @@ function renderExtractedFiguresTable(financials, sortedYears, sources, jobId) {
             for (const yr of sortedYears) {
                 const yrData = financials[yr];
                 const val = (yrData && typeof yrData === 'object') ? yrData[key] : null;
-                html += `<td>${_fmtExtVal(val)}</td>`;
+                const safeVal = val === null ? 'null' : val;
+                html += `<td ondblclick="makeEditable(this, event, '${jobId}', '${yr}', '${key}', ${safeVal})" title="Double-click to edit (raw value)">${_fmtExtVal(val)}</td>`;
             }
             html += '</tr>';
         }
@@ -1090,6 +1091,67 @@ function renderExtractedFiguresTable(financials, sortedYears, sources, jobId) {
     html += '</tbody></table>';
     return html;
 }
+
+window.makeEditable = function(td, event, jobId, year, field, rawValue) {
+    if (td.querySelector('input')) return; // already editing
+    
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = 'any';
+    input.value = rawValue !== null ? rawValue : '';
+    input.className = 'inline-edit-input';
+    
+    // Stop click events from bubbling up to the row and triggering source preview again
+    input.onclick = (e) => e.stopPropagation();
+    input.ondblclick = (e) => e.stopPropagation();
+    
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    
+    const finishEdit = async () => {
+        if (!input.parentNode) return;
+        const newValRaw = input.value === '' ? null : parseFloat(input.value);
+        
+        // Update local object
+        if (!_currentResult.financials[year]) _currentResult.financials[year] = {};
+        _currentResult.financials[year][field] = newValRaw;
+        
+        // Re-render cell
+        td.innerHTML = _fmtExtVal(newValRaw);
+        
+        // Refresh double-click handler so subsequent edits use the new raw value
+        td.ondblclick = (e) => makeEditable(td, e, jobId, year, field, newValRaw);
+
+        // Visual flash indicating save action
+        td.style.transition = 'none';
+        td.style.backgroundColor = 'rgba(56, 189, 248, 0.2)';
+        setTimeout(() => {
+            td.style.transition = 'background-color 0.8s ease';
+            td.style.backgroundColor = '';
+        }, 50);
+
+        // Save to backend endpoint
+        try {
+            const res = await authFetch(`/api/update-financials/${jobId}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ financials: _currentResult.financials })
+            });
+            if (!res.ok) throw new Error("Server rejected update");
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to save edited figure to server.", "error");
+        }
+    };
+    
+    input.onblur = finishEdit;
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            input.blur(); // Trigger the save
+        }
+    };
+};
 
 async function showSourcePreview(rowEl, jobId, year, field) {
     // Highlight the clicked row
