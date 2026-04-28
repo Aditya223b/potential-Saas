@@ -1201,6 +1201,17 @@ async function showSourcePreview(rowEl, jobId, year, field) {
         }
     }
 
+    // Format excerpt nicely if it contains pipes
+    let formattedExcerptHtml = '';
+    if (resolvedExcerpt) {
+        if (resolvedExcerpt.includes('|')) {
+            const cells = resolvedExcerpt.split('|').map(c => `<td>${c.trim()}</td>`).join('');
+            formattedExcerptHtml = `<div class="source-preview-excerpt"><table class="excerpt-table"><tr>${cells}</tr></table></div>`;
+        } else {
+            formattedExcerptHtml = `<div class="source-preview-excerpt">"${resolvedExcerpt}"</div>`;
+        }
+    }
+
     // Render whatever we have
     if (resolvedExcerpt || resolvedSourceFile || resolvedImageUrl) {
         panel.innerHTML = `
@@ -1213,7 +1224,7 @@ async function showSourcePreview(rowEl, jobId, year, field) {
                 <div class="source-preview-image-wrap">
                     <img src="${resolvedImageUrl}" alt="Source preview for ${field}" />
                 </div>` : ''}
-                ${resolvedExcerpt ? `<div class="source-preview-excerpt">"${resolvedExcerpt}"</div>` : ''}
+                ${formattedExcerptHtml}
                 ${!resolvedImageUrl && !resolvedExcerpt ? '<div class="source-preview-empty"><p>Source reference recorded but no image preview available.</p></div>' : ''}
             </div>`;
     } else {
