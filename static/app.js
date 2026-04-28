@@ -1176,45 +1176,45 @@ async function showSourcePreview(rowEl, jobId, year, field) {
     // First check if we have inline source data from the result (for historical analyses)
     const inlineSources = (_currentResult?.financials?.sources || {})[year] || {};
     const inlineSource = inlineSources[field] || {};
+    
+    const inlinePreviews = (_currentResult?.source_previews || {})[year] || {};
+    const inlinePreview = inlinePreviews[field] || {};
 
-    // Try the live API endpoint first (works for active Redis jobs)
-    try {
-        const res = await authFetch(`/api/source-preview/${jobId}?year=${encodeURIComponent(year)}&field=${encodeURIComponent(field)}`);
-        if (res.ok) {
-            const data = await res.json();
-            const excerpt = data.preview?.excerpt || inlineSource.excerpt || '';
-            const sourceFile = data.preview?.source_file || inlineSource.source_file || '';
-            const pageNum = data.preview?.page_number || inlineSource.page_number || '';
-            const imageUrl = data.image_data_url || '';
+    let resolvedImageUrl = inlinePreview.image_base64 ? `data:image/png;base64,${inlinePreview.image_base64}` : '';
+    let resolvedExcerpt = inlinePreview.excerpt || inlineSource.excerpt || '';
+    let resolvedSourceFile = inlinePreview.source_file || inlineSource.source_file || '';
+    let resolvedPageNum = inlinePreview.page_number || inlineSource.page_number || '';
 
-            panel.innerHTML = `
-                <div class="source-preview-card">
-                    <div class="source-preview-header">
-                        <h4>${field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</h4>
-                        <span class="source-meta">${sourceFile ? `${sourceFile}` : ''}${pageNum ? ` • p.${pageNum}` : ''}</span>
-                    </div>
-                    ${imageUrl ? `
-                    <div class="source-preview-image-wrap">
-                        <img src="${imageUrl}" alt="Source preview for ${field}" />
-                    </div>` : ''}
-                    ${excerpt ? `<div class="source-preview-excerpt">"${excerpt}"</div>` : ''}
-                    ${!imageUrl && !excerpt ? '<div class="source-preview-empty"><p>Source reference recorded but no image preview available.</p></div>' : ''}
-                </div>`;
-            return;
+    // If we don't have an inline image, try the live API endpoint (works for active Redis jobs or triggers on-demand generation)
+    if (!resolvedImageUrl) {
+        try {
+            const res = await authFetch(`/api/source-preview/${jobId}?year=${encodeURIComponent(year)}&field=${encodeURIComponent(field)}`);
+            if (res.ok) {
+                const data = await res.json();
+                resolvedExcerpt = data.preview?.excerpt || resolvedExcerpt;
+                resolvedSourceFile = data.preview?.source_file || resolvedSourceFile;
+                resolvedPageNum = data.preview?.page_number || resolvedPageNum;
+                resolvedImageUrl = data.image_data_url || '';
+            }
+        } catch(e) {
+            // API call failed — fall through
         }
-    } catch(e) {
-        // API call failed — fall through to inline sources
     }
 
-    // Fallback: render from inline source data (historical analyses without Redis state)
-    if (inlineSource.excerpt || inlineSource.source_file) {
+    // Render whatever we have
+    if (resolvedExcerpt || resolvedSourceFile || resolvedImageUrl) {
         panel.innerHTML = `
             <div class="source-preview-card">
                 <div class="source-preview-header">
                     <h4>${field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</h4>
-                    <span class="source-meta">${inlineSource.source_file || ''}${inlineSource.page_number ? ` • p.${inlineSource.page_number}` : ''}</span>
+                    <span class="source-meta">${resolvedSourceFile ? `${resolvedSourceFile}` : ''}${resolvedPageNum ? ` • p.${resolvedPageNum}` : ''}</span>
                 </div>
-                ${inlineSource.excerpt ? `<div class="source-preview-excerpt">"${inlineSource.excerpt}"</div>` : ''}
+                ${resolvedImageUrl ? `
+                <div class="source-preview-image-wrap">
+                    <img src="${resolvedImageUrl}" alt="Source preview for ${field}" />
+                </div>` : ''}
+                ${resolvedExcerpt ? `<div class="source-preview-excerpt">"${resolvedExcerpt}"</div>` : ''}
+                ${!resolvedImageUrl && !resolvedExcerpt ? '<div class="source-preview-empty"><p>Source reference recorded but no image preview available.</p></div>' : ''}
             </div>`;
     } else {
         panel.innerHTML = `

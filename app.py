@@ -575,6 +575,7 @@ def run_downstream_pipeline(job: AnalysisJob):
             "projection_analysis": projection_analysis,
             "risk_analysis": risk_analysis,
             "recommendation": recommendation,
+            "source_previews": getattr(job, "source_previews", {}),
         }
 
         output_dir = app.config["REPORTS_FOLDER"]
