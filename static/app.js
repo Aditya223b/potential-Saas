@@ -1448,11 +1448,17 @@ function toggleHistoryMenu(id) {
     closeAllHistoryMenus();
 
     if (!isOpen) {
-        menu.classList.add('show');
-        // Also mark the kebab button as open (so it stays visible)
+        // Position the menu relative to the kebab button
         const item = document.getElementById(`hist-${id}`);
         const kebab = item?.querySelector('.history-kebab');
-        if (kebab) kebab.classList.add('open');
+        if (kebab) {
+            const rect = kebab.getBoundingClientRect();
+            menu.style.top = (rect.bottom + 4) + 'px';
+            menu.style.left = 'auto';
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+            kebab.classList.add('open');
+        }
+        menu.classList.add('show');
     }
     lucide.createIcons();
 }
