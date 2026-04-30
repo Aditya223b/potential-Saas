@@ -614,23 +614,24 @@ def generate_report(analysis: dict, output_dir: str = ".") -> str:
     # ═══════════════════════════════════════════════════════════════════════════
     # 13. PROJECTION ANALYSIS
     # ═══════════════════════════════════════════════════════════════════════════
-    if proj and proj.get("review_table"):
+    if proj and (proj.get("review_table") or proj.get("ai_counter_projection")):
         doc.add_page_break()
-        _section_heading(doc, "Management Projection Analysis")
+        _section_heading(doc, "Projection Analysis")
 
-        # Credibility badge line
-        cred = proj.get("overall_credibility", "N/A")
-        period = proj.get("projection_period", "")
-        cred_line = doc.add_paragraph()
-        cred_color = GREEN if cred == "Realistic" else RED if cred == "Optimistic" else ORANGE
-        cred_line.paragraph_format.space_after = Pt(6)
-        _run(cred_line, f"Overall Credibility: ", size=11, bold=True, color=NAVY)
-        _run(cred_line, cred, size=11, bold=True, color=cred_color)
-        if period:
-            _run(cred_line, f"  •  Period: {period}", size=11, color=MUTED)
+        # Credibility badge line (if we have management projections)
+        if "overall_credibility" in proj:
+            cred = proj.get("overall_credibility", "N/A")
+            period = proj.get("projection_period", "")
+            cred_line = doc.add_paragraph()
+            cred_color = GREEN if cred == "Realistic" else RED if cred == "Optimistic" else ORANGE
+            cred_line.paragraph_format.space_after = Pt(6)
+            _run(cred_line, f"Overall Credibility: ", size=11, bold=True, color=NAVY)
+            _run(cred_line, cred, size=11, bold=True, color=cred_color)
+            if period:
+                _run(cred_line, f"  •  Period: {period}", size=11, color=MUTED)
 
-        if proj.get("overall_credibility_summary"):
-            _add_body(doc, proj["overall_credibility_summary"])
+            if proj.get("overall_credibility_summary"):
+                _add_body(doc, proj["overall_credibility_summary"])
 
         # Management assumptions
         assumptions = proj.get("management_assumptions", [])

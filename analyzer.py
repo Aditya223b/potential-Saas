@@ -429,7 +429,47 @@ def analyze_projections(
     skip the step gracefully.
     """
     if not projection_files:
-        return {}
+        hist_json = json.dumps(historical_financials, indent=2, default=str)[:4000]
+        ratios_json = json.dumps(computed_ratios, indent=2, default=str)[:2000]
+        growth_json = json.dumps(growth_metrics, indent=2, default=str)[:1000]
+
+        prompt = f"""You are a senior financial analyst at a top-tier investment firm.
+You have been asked to provide an independent AI financial projection for {company_name}.
+There are no management projections available, so you must generate a self-projection based entirely on the company's HISTORICAL FINANCIAL PERFORMANCE.
+
+=== HISTORICAL FINANCIALS ===
+{hist_json}
+
+=== CALCULATED RATIOS ===
+{ratios_json}
+
+=== GROWTH METRICS ===
+{growth_json}
+
+INSTRUCTIONS:
+1. Generate an independent AI projection for key metrics (Revenue, EBITDA, Net Profit) for the next 3 years.
+2. Base your projections on historical growth rates, margins, and trends.
+
+Return a JSON object with this exact structure:
+{{
+    "ai_counter_projection": {{
+        "methodology": "Brief description of how you derived the projection (e.g., historical CAGR, margin assumptions)",
+        "projections": [
+            {{
+                "metric": "Revenue",
+                "year_by_year": [
+                    {{"year": "FY2026", "value": "INR 195 Cr", "reasoning": "Based on trailing 18% CAGR"}},
+                    {{"year": "FY2027", "value": "INR 230 Cr", "reasoning": "..."}}
+                ]
+            }}
+        ],
+        "summary": "3-4 sentence summary of the AI's financial projections."
+    }}
+}}
+Return ONLY the JSON — no markdown, no preamble.
+"""
+        raw = _generate(prompt)
+        return _parse_json_response(raw)
 
     hist_json = json.dumps(historical_financials, indent=2, default=str)[:4000]
     ratios_json = json.dumps(computed_ratios, indent=2, default=str)[:2000]

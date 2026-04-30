@@ -797,20 +797,21 @@ function renderResultsView(result, jobId, isHistorical = false) {
 
     // TAB 3: Projected Financials
     let projectedContent = '';
-    if (proj.review_table && proj.review_table.length) {
+    if ((proj.review_table && proj.review_table.length) || proj.ai_counter_projection) {
         const credibilityColor = {
             'Optimistic': 'badge-red', 'Realistic': 'badge-green',
             'Conservative': 'badge-blue', 'Mixed': 'badge-orange',
         };
         projectedContent = `
         <div class="section-card">
-            <h3><span class="icon"><i data-lucide="trending-up" style="width:20px"></i></span> Management Projection Review</h3>
+            <h3><span class="icon"><i data-lucide="trending-up" style="width:20px"></i></span> Projection Analysis</h3>
+            ${proj.overall_credibility ? `
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
                 <span class="badge ${credibilityColor[proj.overall_credibility] || 'badge-orange'}">
                     Overall: ${proj.overall_credibility || 'N/A'}
                 </span>
                 ${proj.projection_period ? `<span style="font-size:12px;color:var(--text-muted)">Period: ${proj.projection_period}</span>` : ''}
-            </div>
+            </div>` : ''}
             ${proj.overall_credibility_summary ? `<p class="summary-text" style="margin-bottom:16px">${proj.overall_credibility_summary}</p>` : ''}
 
             ${proj.management_assumptions && proj.management_assumptions.length ? `
@@ -819,6 +820,7 @@ function renderResultsView(result, jobId, isHistorical = false) {
                 ${proj.management_assumptions.map(a => `<li>${a}</li>`).join('')}
             </ul>` : ''}
 
+            ${proj.review_table && proj.review_table.length ? `
             <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Projection Review</h4>
             <div class="excel-table-container" style="margin-bottom:24px">
                 <table class="excel-table">
@@ -829,17 +831,17 @@ function renderResultsView(result, jobId, isHistorical = false) {
                     <tbody>
                         ${proj.review_table.map(row => {
                             const cClass = row.credibility === 'Realistic' ? 'status-pass' : row.credibility === 'Optimistic' ? 'status-fail' : 'status-caution';
-                            return `<tr>
-                                <td style="font-weight:600">${row.metric}${row.risk_flag ? ' ⚠️' : ''}</td>
-                                <td>${row.management_projection || '—'}</td>
-                                <td style="color:var(--text-muted)">${row.historical_baseline || '—'}</td>
-                                <td class="${cClass}">${row.credibility || '—'}</td>
-                                <td style="font-size:12px;color:var(--text-secondary)">${row.credibility_reason || '—'}</td>
-                            </tr>`;
+                            return \`<tr>
+                                <td style="font-weight:600">\${row.metric}\${row.risk_flag ? ' ⚠️' : ''}</td>
+                                <td>\${row.management_projection || '—'}</td>
+                                <td style="color:var(--text-muted)">\${row.historical_baseline || '—'}</td>
+                                <td class="\${cClass}">\${row.credibility || '—'}</td>
+                                <td style="font-size:12px;color:var(--text-secondary)">\${row.credibility_reason || '—'}</td>
+                            </tr>\`;
                         }).join('')}
                     </tbody>
                 </table>
-            </div>
+            </div>` : ''}
 
             ${proj.key_concerns && proj.key_concerns.length ? `
             <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">Key Concerns</h4>
@@ -1913,6 +1915,21 @@ async function uploadProjectionFiles() {
     }
 }
 window.uploadProjectionFiles = uploadProjectionFiles;
+
+function skipProjectionUpload() {
+    if (!_currentValidationJobId) return;
+    
+    // We update the backend status to "waiting_for_user" so that
+    // it properly tracks the state if the user refreshes.
+    authFetch(`/api/skip_projection/${_currentValidationJobId}`, { method: 'POST' })
+        .then(() => {
+            showValidationSplitView(_currentValidationJobId);
+        })
+        .catch(() => {
+            showValidationSplitView(_currentValidationJobId);
+        });
+}
+window.skipProjectionUpload = skipProjectionUpload;
 
 async function showValidationSplitView(jobId) {
     _currentValidationJobId = jobId;

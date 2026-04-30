@@ -417,42 +417,69 @@ def run_extraction_pipeline(
         logger.info(f"[{job.job_id}] Step 2: Document categorisation complete")
         job.add_progress("categorize", "✅ Historical financial statements categorised", done=True)
 
-        # Step 3: Extract financial figures (multi-year)
-        job.add_progress("extract", "🤖 Extracting financial figures utilizing Native File API...")
-        logger.info(f"[{job.job_id}] Step 3: AI extraction with {len(job.gemini_files)} file refs...")
-        from analyzer import extract_financial_figures, _get_multi_year_financials
-        raw_financials = extract_financial_figures(job.gemini_files)
-        financials = _get_multi_year_financials(raw_financials)
-        job.extracted_financials = financials
-        job.extraction_sources = raw_financials.get("sources", {})
-        years = financials.get("years_found", [])
-        logger.info(f"[{job.job_id}] Step 3 DONE: {len(years)} years extracted: {years}")
-        job.add_progress("extract", f"✅ Extracted financials for {len(years)} year(s): {', '.join(years)}", done=True)
-
-        # Source preview generation runs in background so it doesn't block the pipeline.
-        # By the time the analyst reaches the Verification table (after the projection
-        # upload step), the images are already fully rendered and waiting.
-        _preview_pdf_paths = list(pdf_paths)   # copy before finally-cleanup
-        _preview_sources   = dict(job.extraction_sources)
-        _preview_job_id    = job.job_id
-
-        def _build_previews_bg():
+        # Step 3: Extract financial figures and run background research concurrently
+        import concurrent.futures
+        
+        def _do_extraction():
+            job.add_progress("extract", "🤖 Extracting financial figures utilizing Native File API...")
+            logger.info(f"[{job.job_id}] Step 3: AI extraction with {len(job.gemini_files)} file refs...")
+            from analyzer import extract_financial_figures, _get_multi_year_financials
+            raw_financials = extract_financial_figures(job.gemini_files)
+            financials = _get_multi_year_financials(raw_financials)
+            job.extracted_financials = financials
+            job.extraction_sources = raw_financials.get("sources", {})
+            years = financials.get("years_found", [])
+            logger.info(f"[{job.job_id}] Step 3 DONE: {len(years)} years extracted: {years}")
+            job.add_progress("extract", f"✅ Extracted financials for {len(years)} year(s): {', '.join(years)}", done=True)
+            return raw_financials, financials, years
+            
+        def _do_research():
             try:
-                previews = _generate_source_previews(
-                    _preview_pdf_paths, _preview_sources, _preview_job_id
-                )
-                # Write directly to Redis so the job state has the images
-                # when the analyst opens the Verification panel
-                job.source_previews = previews
-                job._persist_async()
-                logger.info(f"[{_preview_job_id}] Source previews generated in background ({len(previews)} year(s))")
-            except Exception as _e:
-                logger.warning(f"[{_preview_job_id}] Background source preview failed: {_e}")
-            finally:
-                # Clean up local PDFs now that preview rendering is done
-                _cleanup_local_uploads(_preview_pdf_paths)
+                job.add_progress("web", f"🌐 Researching {company_name} online...")
+                logger.info(f"[{job.job_id}] Background: Web research for {company_name}...")
+                from web_scraper import scrape_company_info, search_competitors
+                company_web = scrape_company_info(company_name, website_url_override=company_website)
+                competitor_web = search_competitors(company_name)
+                job.add_progress("web", f"✅ Website: {company_web.get('website_url', 'Not found')} | {len(competitor_web)} competitors found", done=True)
+                
+                job.add_progress("background", "🤖 Analyzing company background...")
+                logger.info(f"[{job.job_id}] Background: Company background analysis...")
+                from analyzer import analyze_company_background, analyze_competitors
+                company_research_context = company_web.get("raw_data", "")
+                if company_context:
+                    company_research_context = f"{company_research_context}\n\n=== USER PROVIDED COMPANY CONTEXT ===\n{company_context}".strip()
+                background = analyze_company_background(company_name, job.gemini_files, company_research_context)
+                job.background = background
+                job.add_progress("background", "✅ Company background complete", done=True)
+                
+                job.add_progress("competitors", "🤖 Analyzing competitors...")
+                logger.info(f"[{job.job_id}] Background: Competitor analysis...")
+                industry = background.get("industry", "Unknown")
+                competitors = analyze_competitors(company_name, industry, competitor_web)
+                job.competitors = competitors
+                job.add_progress("competitors", "✅ Competitor analysis complete", done=True)
+            except Exception as e:
+                logger.error(f"[{job.job_id}] Background research failed: {e}", exc_info=True)
 
-        threading.Thread(target=_build_previews_bg, daemon=True).start()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            f_extract = executor.submit(_do_extraction)
+            f_research = executor.submit(_do_research)
+            
+            raw_financials, financials, years = f_extract.result()
+            f_research.result()
+
+        # Step 3.5: Generate Source Previews
+        # We generate this synchronously now so the RQ worker doesn't exit and kill the thread.
+        try:
+            job.add_progress("preview", "🖼️ Generating document source previews...")
+            previews = _generate_source_previews(pdf_paths, job.extraction_sources, job.job_id)
+            job.source_previews = previews
+            logger.info(f"[{job.job_id}] Source previews generated ({len(previews)} year(s))")
+        except Exception as _e:
+            logger.warning(f"[{job.job_id}] Source preview failed: {_e}")
+        finally:
+            # Clean up local PDFs now that preview rendering is done
+            _cleanup_local_uploads(pdf_paths)
 
         # Step 4: Pause for projection upload
         job.add_progress("projection", "⏳ Awaiting company projection upload before analyst verification...")
@@ -477,35 +504,8 @@ def run_downstream_pipeline(job: AnalysisJob):
         company_name = job.company_name
         years = financials.get("years_found", [])
 
-        # Step 5: Web research and company analysis
-        job.add_progress("web", f"🌐 Researching {company_name} online...")
-        logger.info(f"[{job.job_id}] Step 5: Web research for {company_name}...")
-        from web_scraper import scrape_company_info, search_competitors
-        company_web = scrape_company_info(company_name, website_url_override=job.company_website)
-        competitor_web = search_competitors(company_name)
-        web_msg = f"✅ Website: {company_web.get('website_url', 'Not found')} | {len(competitor_web)} competitors found"
-        logger.info(f"[{job.job_id}] Step 5 DONE: {web_msg}")
-        job.add_progress("web", web_msg, done=True)
-
-        job.add_progress("background", "🤖 Analyzing company background...")
-        logger.info(f"[{job.job_id}] Step 6: Company background analysis...")
-        from analyzer import analyze_company_background, analyze_competitors
-        company_research_context = company_web.get("raw_data", "")
-        if job.company_context:
-            company_research_context = (
-                f"{company_research_context}\n\n=== USER PROVIDED COMPANY CONTEXT ===\n"
-                f"{job.company_context}"
-            ).strip()
-        background = analyze_company_background(company_name, job.gemini_files, company_research_context)
-        job.background = background
-        job.add_progress("background", "✅ Company background complete", done=True)
-
-        job.add_progress("competitors", "🤖 Analyzing competitors...")
-        logger.info(f"[{job.job_id}] Step 7: Competitor analysis...")
-        industry = background.get("industry", "Unknown")
-        competitors = analyze_competitors(company_name, industry, competitor_web)
-        job.competitors = competitors
-        job.add_progress("competitors", "✅ Competitor analysis complete", done=True)
+        background = getattr(job, "background", {}) or {}
+        competitors = getattr(job, "competitors", {}) or {}
 
         # Step 8: Calculate ratios (multi-year)
         job.add_progress("ratios", "📊 Calculating financial ratios...")
@@ -729,8 +729,6 @@ def approve_financials(job_id):
     job = get_job_object(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
-    if not job.projection_filenames:
-        return jsonify({"error": "Upload projection files before approving the financials"}), 400
 
     data = request.get_json()
     verified_financials = data.get("financials")
@@ -816,6 +814,20 @@ def upload_projection(job_id):
         return jsonify({"error": str(e)}), 500
     finally:
         _cleanup_local_uploads(projection_paths)
+
+
+@app.route("/api/skip_projection/<job_id>", methods=["POST"])
+def skip_projection(job_id):
+    """Skip projection upload and go straight to verification."""
+    job = get_job_object(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    job.add_progress("projection", "ℹ️ Projection upload skipped by user", done=True)
+    job.add_progress("validate", "⏳ Waiting for human validation of extracted financial data...")
+    job.set_status("waiting_for_user")
+
+    return jsonify({"status": "waiting_for_user"})
 
 
 @app.route("/api/restart_job/<job_id>", methods=["POST"])
