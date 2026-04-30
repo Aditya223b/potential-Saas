@@ -831,13 +831,13 @@ function renderResultsView(result, jobId, isHistorical = false) {
                     <tbody>
                         ${proj.review_table.map(row => {
                             const cClass = row.credibility === 'Realistic' ? 'status-pass' : row.credibility === 'Optimistic' ? 'status-fail' : 'status-caution';
-                            return \`<tr>
-                                <td style="font-weight:600">\${row.metric}\${row.risk_flag ? ' ⚠️' : ''}</td>
-                                <td>\${row.management_projection || '—'}</td>
-                                <td style="color:var(--text-muted)">\${row.historical_baseline || '—'}</td>
-                                <td class="\${cClass}">\${row.credibility || '—'}</td>
-                                <td style="font-size:12px;color:var(--text-secondary)">\${row.credibility_reason || '—'}</td>
-                            </tr>\`;
+                            return `<tr>
+                                <td style="font-weight:600">${row.metric}${row.risk_flag ? ' ⚠️' : ''}</td>
+                                <td>${row.management_projection || '—'}</td>
+                                <td style="color:var(--text-muted)">${row.historical_baseline || '—'}</td>
+                                <td class="${cClass}">${row.credibility || '—'}</td>
+                                <td style="font-size:12px;color:var(--text-secondary)">${row.credibility_reason || '—'}</td>
+                            </tr>`;
                         }).join('')}
                     </tbody>
                 </table>
