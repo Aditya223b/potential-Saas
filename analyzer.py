@@ -109,25 +109,34 @@ def extract_financial_figures(gemini_files: list[str]) -> dict:
 
     prompt = f"""You are an expert financial analyst. Analyze the attached financial statement PDF documents.
 
-CRITICAL: Extract financial figures for ALL AVAILABLE YEARS. These documents may contain:
-- FY2024-25 (year ending March 2025) data
-- FY2023-24 (year ending March 2024) data
-- Previous year comparatives
+CRITICAL INSTRUCTIONS TO PREVENT HALLUCINATIONS:
+1. YEAR MISALIGNMENT: Audited statements ALWAYS have two columns (Current Year and Previous Year). 
+   - Look EXACTLY at the column headers (e.g., "As at 31st March 2024" vs "As at 31st March 2023").
+   - Never mix numbers from the current year column with the previous year column.
 
-Look for:
-- T-format balance sheets may show "Opening Capital" which is the PRIOR YEAR equity
-- Audited statements often include both current and previous year columns
-- Scanned documents may contain multiple years of data
-- The documents may span different fiscal years — extract ALL of them
+2. SCALE AND CURRENCY (LAKHS/CRORES): 
+   - Look at the top right of the balance sheet or P&L. It usually says "(₹ in Lakhs)", "(₹ in Crores)", or "(in ₹)".
+   - You MUST convert all figures to BASE RUPEES. 
+   - If the note says "Lakhs", multiply the printed number by 100,000. 
+   - If the note says "Crores", multiply by 10,000,000.
+   - Example: If the table says 1,500.50 and the note is "Lakhs", the value is 150050000. Do not drop zeros!
+
+3. TERMINOLOGY GUARDRAILS:
+   - `reserves` = "Reserves & Surplus" or "Other Equity". This is CRITICAL.
+   - `equity` = "Equity Share Capital" + "Other Equity" (or Reserves & Surplus).
+   - `total_debt` = "Long Term Borrowings" + "Short Term Borrowings".
+   - `cash_and_equivalents` = "Cash & Cash Equivalents" + "Bank Balances other than above".
+
+Extract financial figures for ALL AVAILABLE YEARS found in the documents.
 
 Return a JSON object organized BY YEAR with these keys for EACH year found:
 
 {{
-    "years_found": ["FY2025", "FY2024"],
-    "FY2025": {{
-        "year_label": "FY2024-25 (ending Mar 2025)",
+    "years_found": ["FY2024", "FY2023"],
+    "FY2024": {{
+        "year_label": "FY2023-24 (ending Mar 2024)",
         "currency": "INR",
-        "scale_note": "describe conversions",
+        "scale_note": "Found '₹ in Lakhs' at top of page, multiplied by 100000",
         
         "revenue": 0,
         "other_income": 0,
@@ -168,39 +177,26 @@ Return a JSON object organized BY YEAR with these keys for EACH year found:
         "investing_cash_flow": 0,
         "financing_cash_flow": 0
     }},
-    "FY2024": {{
+    "FY2023": {{
         ... same structure ...
     }},
     "sources": {{
-        "FY2025": {{
+        "FY2024": {{
             "revenue": {{
                 "source_file": "name of uploaded file where this value was found",
                 "page_number": 1,
-                "excerpt": "short line or table row showing the value in context"
-            }}
-        }},
-        "FY2024": {{
-            "...": {{
-                "source_file": "file name",
-                "page_number": 1,
-                "excerpt": "supporting excerpt"
+                "excerpt": "short line or table row showing the exact printed value before conversion"
             }}
         }}
     }}
 }}
 
-IMPORTANT NOTES:
-- If a value cannot be found for a year, use null, but output 0 if it is explicitly zero.
-- If interest/finance cost is present in the P&L, extract it — do NOT set it to 0 if loans exist.
-- All values should be in BASE CURRENCY UNITS (Rupees, not Lakhs/Crores) — convert if needed.
-  For example: 1,62,65,555 in Indian numbering = 16265555 rupees.
-- `reserves` = Reserves & Surplus (or Net Worth minus share capital). This is CRITICAL.
-- `equity` = Equity Share Capital + Reserves & Surplus.
-- `total_debt` = long_term_borrowings + short_term_borrowings.
-- For every extracted numeric field, populate `sources` with the best supporting file name, page number, and excerpt.
-- Keep each `excerpt` short and table-oriented so it can be used to render a source preview for analyst verification.
+IMPORTANT RULES:
+- If a value cannot be found, use null. Output 0 ONLY if it is explicitly written as 0.
+- If interest/finance cost is present, extract it — do NOT set it to 0 if loans exist.
+- For every extracted numeric field, populate `sources` with the supporting file name, page number, and an excerpt showing the *original printed number* before conversion.
 
-Return ONLY the JSON object, no explanation.
+Return ONLY the JSON object, no markdown blocks, no explanation.
 """
     # Use the standard Pro→Flash fallback chain.
     # DO NOT pass response_mime_type here — Gemini silently hangs
