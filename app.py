@@ -656,6 +656,18 @@ def health():
     return jsonify({"status": "ok"})
 
 
+@app.route("/api/config")
+def client_config():
+    """Serve publishable client configuration (Supabase URL + anon key).
+    These are NOT secrets — they're designed to be public-facing.
+    Serving them from the server allows rotation without redeploying JS."""
+    from config import SUPABASE_URL, SUPABASE_KEY
+    return jsonify({
+        "supabase_url": SUPABASE_URL,
+        "supabase_key": SUPABASE_KEY,
+    })
+
+
 @app.route("/")
 def index():
     return render_template("index.html")

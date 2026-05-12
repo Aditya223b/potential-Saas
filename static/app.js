@@ -9,8 +9,8 @@ let _currentJobId = null; // Renamed from currentJobId for consistency
 let _currentResult = null; // Cached result for tab downloads
 let historyAnalyses = [];
 
-const SUPABASE_URL = 'https://hattlirxjifrbmmwwytj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhhdHRsaXJ4amlmcmJtbXd3eXRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNzMwODUsImV4cCI6MjA4ODY0OTA4NX0.5OLqyQ7XDGJ2zwC-jWUJblzRd1LRVLi-Mgaavxw0GDc';
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
 
 // ── State Persistence Helpers ───────────────────────────────
 function saveAppState(view, jobId = null) {
@@ -49,6 +49,20 @@ window.onload = async () => {
     // Init Theme — CSS handles all visual state via data-theme attribute
     const savedTheme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
+
+    // Fetch Supabase config from server (no more hardcoded keys in JS)
+    try {
+        const cfgResp = await fetch('/api/config');
+        if (!cfgResp.ok) throw new Error(`Config fetch failed: ${cfgResp.status}`);
+        const cfg = await cfgResp.json();
+        SUPABASE_URL = cfg.supabase_url;
+        SUPABASE_KEY = cfg.supabase_key;
+    } catch (e) {
+        console.error('Failed to load app config:', e);
+        const errEl = document.getElementById('authError');
+        if (errEl) errEl.textContent = 'App configuration failed. Please refresh the page.';
+        return;
+    }
 
     // Init Supabase
     _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);

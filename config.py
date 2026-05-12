@@ -35,6 +35,9 @@ SUPABASE_SERVICE_KEY: str = _require("SUPABASE_SERVICE_KEY")
 REDIS_URL: str = _get("REDIS_URL", "redis://localhost:6379")
 SENTRY_DSN: str = _get("SENTRY_DSN", "")
 
+# ── Search API (company/competitor research) ──────────────────────────────
+SERPAPI_KEY: str = _get("SERPAPI_KEY", "")
+
 # ── Rate Limiting ─────────────────────────────────────────────────────────────
 # Max AI analyses per authenticated user. Adjust in .env to suit your budget.
 RATE_LIMIT_PER_HOUR: int = int(_get("RATE_LIMIT_PER_HOUR", "5"))

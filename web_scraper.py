@@ -1,6 +1,10 @@
 """
 Web Scraper — Searches for and scrapes company & competitor websites
 to gather background research data for the AI analysis.
+
+Search strategy:
+  1. SerpAPI (if SERPAPI_KEY is set) — works reliably from cloud IPs
+  2. Google fallback (direct requests) — works locally but blocked on Railway/Render
 """
 
 import re
@@ -21,6 +25,12 @@ HEADERS = {
 
 TIMEOUT = 10  # seconds — keep short for cloud deployments
 
+# Domains to always skip in search results
+_SKIP_DOMAINS = [
+    "google.", "youtube.", "wikipedia.", "facebook.",
+    "twitter.", "linkedin.", "instagram.", "reddit.",
+]
+
 
 def _normalize_website_url(url: str) -> str:
     """Normalize a user-provided company website URL for scraping."""
@@ -35,11 +45,49 @@ def _normalize_website_url(url: str) -> str:
     return url
 
 
+# ── Search Functions (SerpAPI primary, Google fallback) ──────────────────────
+
+
 def search_company_website(company_name: str) -> str | None:
     """
-    Search Google for the company's official website URL.
-    Returns the most likely official URL or None.
+    Search for the company's official website URL.
+    Uses SerpAPI when available, falls back to direct Google scraping.
     """
+    from config import SERPAPI_KEY
+
+    if SERPAPI_KEY:
+        return _search_company_website_serpapi(company_name, SERPAPI_KEY)
+    return _search_company_website_google(company_name)
+
+
+def _search_company_website_serpapi(company_name: str, api_key: str) -> str | None:
+    """Search via SerpAPI — reliable from cloud IPs."""
+    query = f"{company_name} official website"
+    try:
+        resp = requests.get("https://serpapi.com/search.json", params={
+            "q": query,
+            "num": 5,
+            "api_key": api_key,
+            "engine": "google",
+        }, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+
+        for result in data.get("organic_results", []):
+            url = result.get("link", "")
+            parsed = urlparse(url)
+            if parsed.scheme in ("http", "https") and not any(d in parsed.netloc for d in _SKIP_DOMAINS):
+                print(f"  🌐 SerpAPI found website: {url}")
+                return url
+
+    except Exception as e:
+        print(f"  ⚠️  SerpAPI search failed for '{company_name}': {e}")
+
+    return None
+
+
+def _search_company_website_google(company_name: str) -> str | None:
+    """Fallback: direct Google search (blocked on most cloud IPs)."""
     query = f"{company_name} official website"
     search_url = "https://www.google.com/search"
     params = {"q": query, "num": 5}
@@ -49,19 +97,12 @@ def search_company_website(company_name: str) -> str | None:
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Extract URLs from search results
         for a_tag in soup.find_all("a", href=True):
             href = a_tag["href"]
-            # Google wraps URLs like /url?q=https://example.com&...
             if "/url?q=" in href:
                 url = href.split("/url?q=")[1].split("&")[0]
                 parsed = urlparse(url)
-                # Skip Google/YouTube/Wikipedia/social media
-                skip_domains = [
-                    "google.", "youtube.", "wikipedia.", "facebook.",
-                    "twitter.", "linkedin.", "instagram.", "reddit.",
-                ]
-                if parsed.scheme in ("http", "https") and not any(d in parsed.netloc for d in skip_domains):
+                if parsed.scheme in ("http", "https") and not any(d in parsed.netloc for d in _SKIP_DOMAINS):
                     return url
 
     except Exception as e:
@@ -209,8 +250,59 @@ def scrape_company_info(company_name: str, website_url_override: str = "") -> di
 def search_competitors(company_name: str, industry_hint: str = "") -> list[dict]:
     """
     Search for competitors and scrape their basic info.
+    Uses SerpAPI when available, falls back to direct Google scraping.
     Designed to fail gracefully — competitor data is supplementary.
     """
+    from config import SERPAPI_KEY
+
+    if SERPAPI_KEY:
+        return _search_competitors_serpapi(company_name, industry_hint, SERPAPI_KEY)
+    return _search_competitors_google(company_name, industry_hint)
+
+
+def _search_competitors_serpapi(company_name: str, industry_hint: str, api_key: str) -> list[dict]:
+    """Search for competitors via SerpAPI — reliable from cloud IPs."""
+    competitors = []
+    query = f"{company_name} competitors {industry_hint}".strip()
+    print(f"  🔍 Searching for competitors via SerpAPI: {query}")
+
+    try:
+        resp = requests.get("https://serpapi.com/search.json", params={
+            "q": query,
+            "num": 10,
+            "api_key": api_key,
+            "engine": "google",
+        }, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+
+        found_urls = set()
+        extra_skip = [company_name.lower().replace(" ", "")]
+
+        for result in data.get("organic_results", []):
+            url = result.get("link", "")
+            parsed = urlparse(url)
+            all_skip = _SKIP_DOMAINS + extra_skip
+
+            if (
+                parsed.scheme in ("http", "https")
+                and not any(d in parsed.netloc.lower() for d in all_skip)
+                and parsed.netloc not in found_urls
+                and len(competitors) < 3
+            ):
+                found_urls.add(parsed.netloc)
+                print(f"  🌐 Scraping competitor: {url}")
+                page_data = scrape_page(url, max_chars=2000)
+                competitors.append(page_data)
+
+    except Exception as e:
+        print(f"  ⚠️  SerpAPI competitor search failed (non-blocking): {e}")
+
+    return competitors
+
+
+def _search_competitors_google(company_name: str, industry_hint: str = "") -> list[dict]:
+    """Fallback: direct Google search for competitors (blocked on cloud IPs)."""
     competitors = []
 
     try:
@@ -231,14 +323,11 @@ def search_competitors(company_name: str, industry_hint: str = "") -> list[dict]
             if "/url?q=" in href:
                 url = href.split("/url?q=")[1].split("&")[0]
                 parsed = urlparse(url)
-                skip_domains = [
-                    "google.", "youtube.", "wikipedia.", "facebook.",
-                    "twitter.", "linkedin.", "instagram.", "reddit.",
-                    company_name.lower().replace(" ", ""),
-                ]
+                extra_skip = [company_name.lower().replace(" ", "")]
+                all_skip = _SKIP_DOMAINS + extra_skip
                 if (
                     parsed.scheme in ("http", "https")
-                    and not any(d in parsed.netloc.lower() for d in skip_domains)
+                    and not any(d in parsed.netloc.lower() for d in all_skip)
                     and parsed.netloc not in found_urls
                     and len(competitors) < 3
                 ):
