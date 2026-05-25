@@ -174,14 +174,27 @@
                         </div>
                     </div>
 
-                    <div class="dropzone" id="dropzone">
-                        <input type="file" id="fileInput" accept=".pdf" multiple>
-                        <div class="dropzone-icon">📁</div>
-                        <h3>Drop your PDFs here</h3>
-                        <p>or click to browse · Supports multiple files</p>
-                    </div>
+                    <div class="upload-container-card">
+                        <div class="upload-header">
+                            <h3>Upload Files</h3>
+                            <button class="upload-close-btn" type="button" onclick="clearSelectedFiles()" title="Clear uploaded files">✕</button>
+                        </div>
+                        <div class="dropzone" id="dropzone">
+                            <input type="file" id="fileInput" accept=".pdf" multiple>
+                            <div class="premium-dropzone-icon">
+                                <div class="file-stack-icon">
+                                    <div class="file-icon-back"></div>
+                                    <div class="file-icon-front">
+                                        <span class="plus-sign">+</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="dropzone-text">DRAG AND DROP OR <span class="highlight-green">CLICK TO BROWSE</span></div>
+                            <div class="dropzone-subtext">MAX FILE SIZE: 8MB</div>
+                        </div>
 
-                    <div class="file-list" id="fileList" style="display:none"></div>
+                        <div class="file-list" id="fileList" style="display:none"></div>
+                    </div>
 
                     <div class="wizard-actions">
                         <div></div>
@@ -324,10 +337,26 @@
                             <p class="subtitle" style="margin-bottom: 16px;">
                                 Stage 1 is complete. Upload the company’s projected financials before analyst verification.
                             </p>
-                            <div class="projection-upload-card">
-                                <input type="file" id="projectionFileInput" accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.pptx,.ppt,.png,.jpg,.jpeg,.webp,.txt" multiple>
-                                <p class="projection-help">Upload any document type — PDF, Excel, Word, CSV, PowerPoint, or images.</p>
-                                <div id="projectionFileList" class="file-list" style="display:none;"></div>
+                            <div class="upload-container-card">
+                                <div class="upload-header">
+                                    <h3>Upload Company Projections</h3>
+                                    <button class="upload-close-btn" type="button" onclick="clearSelectedProjectionFiles()" title="Clear uploaded projections">✕</button>
+                                </div>
+                                <div class="dropzone" id="projectionDropzone">
+                                    <input type="file" id="projectionFileInput" accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.pptx,.ppt,.png,.jpg,.jpeg,.webp,.txt" multiple>
+                                    <div class="premium-dropzone-icon">
+                                        <div class="file-stack-icon">
+                                            <div class="file-icon-back"></div>
+                                            <div class="file-icon-front">
+                                                <span class="plus-sign">+</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="dropzone-text">DRAG AND DROP OR <span class="highlight-green">CLICK TO BROWSE</span></div>
+                                    <div class="dropzone-subtext">MAX FILE SIZE: 25MB</div>
+                                </div>
+
+                                <div class="file-list" id="projectionFileList" style="display:none;"></div>
                             </div>
                             <div class="modal-actions" style="margin-top: 24px;">
                                 <button class="btn btn-ghost" id="skipProjectionBtn" onclick="skipProjectionUpload()">Skip Projection Upload</button>
@@ -392,11 +421,11 @@
 <div class="toast" id="toast"></div>
 
 <!-- Supabase JS client (CDN) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.4/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for Excel formatting -->
-<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <!-- Lucide Icons -->
-<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/lucide@0.379.0/dist/umd/lucide.min.js"></script>
 <script src="/static/app.js?v=21"></script>
 
 <script>

@@ -5,6 +5,8 @@ let _isLoginMode = true;
 
 let selectedFiles = [];
 let selectedProjectionFiles = [];
+let fileProgress = {};
+let projectionFileProgress = {};
 let _currentJobId = null; // Renamed from currentJobId for consistency
 let _currentResult = null; // Cached result for tab downloads
 let historyAnalyses = [];
@@ -326,6 +328,8 @@ function newAnalysis() {
     clearAppState();
     selectedFiles = [];
     selectedProjectionFiles = [];
+    fileProgress = {};
+    projectionFileProgress = {};
     _currentJobId = null;
     wizardSection.style.display = 'block';
     progressSection.style.display = 'none';
@@ -363,12 +367,55 @@ function setupFileListeners() {
         dropzone.classList.remove('dragover');
         addFiles(Array.from(e.dataTransfer.files));
     });
+
+    const projectionDropzone = document.getElementById('projectionDropzone');
+    if (projectionDropzone) {
+        projectionDropzone.addEventListener('dragover', (e) => { e.preventDefault(); projectionDropzone.classList.add('dragover'); });
+        projectionDropzone.addEventListener('dragleave', () => projectionDropzone.classList.remove('dragover'));
+        projectionDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            projectionDropzone.classList.remove('dragover');
+            addProjectionFiles(Array.from(e.dataTransfer.files));
+        });
+    }
+}
+
+function simulateProgress(fileName, isProjection = false) {
+    const progressMap = isProjection ? projectionFileProgress : fileProgress;
+    if (progressMap[fileName] !== undefined) return;
+    progressMap[fileName] = 0;
+
+    const startTime = Date.now();
+    const duration = 600 + Math.random() * 300; // 600ms - 900ms
+
+    const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        let progress = Math.min(100, Math.floor((elapsed / duration) * 100));
+        progressMap[fileName] = progress;
+
+        if (isProjection) {
+            renderProjectionFileList();
+        } else {
+            renderFileList();
+        }
+
+        if (progress >= 100) {
+            progressMap[fileName] = 100;
+            clearInterval(interval);
+            if (isProjection) {
+                renderProjectionFileList();
+            } else {
+                renderFileList();
+            }
+        }
+    }, 30);
 }
 
 function addFiles(files) {
     files.forEach(f => {
         if (f.type === 'application/pdf' && !selectedFiles.find(sf => sf.name === f.name)) {
             selectedFiles.push(f);
+            simulateProgress(f.name, false);
         }
     });
     renderFileList();
@@ -378,22 +425,45 @@ function addProjectionFiles(files) {
     files.forEach(f => {
         if (!selectedProjectionFiles.find(sf => sf.name === f.name)) {
             selectedProjectionFiles.push(f);
+            simulateProgress(f.name, true);
         }
     });
     renderProjectionFileList();
 }
 
 function removeProjectionFile(index) {
+    const file = selectedProjectionFiles[index];
+    if (file) {
+        delete projectionFileProgress[file.name];
+    }
     selectedProjectionFiles.splice(index, 1);
     renderProjectionFileList();
 }
 window.removeProjectionFile = removeProjectionFile;
 
 function removeFile(index) {
+    const file = selectedFiles[index];
+    if (file) {
+        delete fileProgress[file.name];
+    }
     selectedFiles.splice(index, 1);
     renderFileList();
 }
 window.removeFile = removeFile;
+
+function clearSelectedFiles() {
+    selectedFiles = [];
+    fileProgress = {};
+    renderFileList();
+}
+window.clearSelectedFiles = clearSelectedFiles;
+
+function clearSelectedProjectionFiles() {
+    selectedProjectionFiles = [];
+    projectionFileProgress = {};
+    renderProjectionFileList();
+}
+window.clearSelectedProjectionFiles = clearSelectedProjectionFiles;
 
 function renderFileList() {
     if (selectedFiles.length === 0) {
@@ -402,15 +472,36 @@ function renderFileList() {
         return;
     }
     fileList.style.display = 'block';
-    toStep2Btn.disabled = false;
-    fileList.innerHTML = selectedFiles.map((f, i) => `
-        <div class="file-item">
-            <span class="file-icon"><i data-lucide="file-text" style="width: 14px;"></i></span>
-            <span class="file-name">${f.name}</span>
-            <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
-            <button class="file-remove" onclick="removeFile(${i})">✕</button>
-        </div>
-    `).join('');
+    
+    const allDone = selectedFiles.every(f => (fileProgress[f.name] !== undefined ? fileProgress[f.name] >= 100 : true));
+    toStep2Btn.disabled = !allDone;
+
+    fileList.innerHTML = selectedFiles.map((f, i) => {
+        const ext = f.name.split('.').pop().toUpperCase();
+        const sizeText = f.size > 1024 * 1024 
+            ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` 
+            : `${(f.size / 1024).toFixed(0)} KB`;
+        const progress = fileProgress[f.name] !== undefined ? fileProgress[f.name] : 100;
+
+        return `
+            <div class="premium-file-card">
+                <div class="badge-file-ext">${ext}</div>
+                <div class="premium-file-info">
+                    <div class="file-card-top-row">
+                        <span class="premium-file-name" title="${f.name}">${f.name}</span>
+                        <span class="premium-file-percentage">${progress}%</span>
+                    </div>
+                    <div class="progress-bar-segmented">
+                        <div class="progress-bar-segmented-fill" style="width: ${progress}%"></div>
+                    </div>
+                    <div class="file-card-bottom-row">
+                        .${ext.toLowerCase()} / ${sizeText}
+                    </div>
+                </div>
+                <button class="file-card-remove-btn" onclick="removeFile(${i})" title="Remove file">✕</button>
+            </div>
+        `;
+    }).join('');
 }
 
 function renderProjectionFileList() {
@@ -418,17 +509,46 @@ function renderProjectionFileList() {
     if (!projectionFileList) return;
     if (selectedProjectionFiles.length === 0) {
         projectionFileList.style.display = 'none';
+        const uploadProjectionBtn = document.getElementById('uploadProjectionBtn');
+        if (uploadProjectionBtn) {
+            uploadProjectionBtn.disabled = false;
+        }
         return;
     }
     projectionFileList.style.display = 'block';
-    projectionFileList.innerHTML = selectedProjectionFiles.map((f, i) => `
-        <div class="file-item">
-            <span class="file-icon"><i data-lucide="trending-up" style="width: 14px;"></i></span>
-            <span class="file-name">${f.name}</span>
-            <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
-            <button class="file-remove" onclick="removeProjectionFile(${i})">✕</button>
-        </div>
-    `).join('');
+
+    const allProjectionDone = selectedProjectionFiles.every(f => (projectionFileProgress[f.name] !== undefined ? projectionFileProgress[f.name] >= 100 : true));
+    const uploadProjectionBtn = document.getElementById('uploadProjectionBtn');
+    if (uploadProjectionBtn) {
+        uploadProjectionBtn.disabled = !allProjectionDone;
+    }
+
+    projectionFileList.innerHTML = selectedProjectionFiles.map((f, i) => {
+        const ext = f.name.split('.').pop().toUpperCase();
+        const sizeText = f.size > 1024 * 1024 
+            ? `${(f.size / (1024 * 1024)).toFixed(1)} MB` 
+            : `${(f.size / 1024).toFixed(0)} KB`;
+        const progress = projectionFileProgress[f.name] !== undefined ? projectionFileProgress[f.name] : 100;
+
+        return `
+            <div class="premium-file-card">
+                <div class="badge-file-ext">${ext}</div>
+                <div class="premium-file-info">
+                    <div class="file-card-top-row">
+                        <span class="premium-file-name" title="${f.name}">${f.name}</span>
+                        <span class="premium-file-percentage">${progress}%</span>
+                    </div>
+                    <div class="progress-bar-segmented">
+                        <div class="progress-bar-segmented-fill" style="width: ${progress}%"></div>
+                    </div>
+                    <div class="file-card-bottom-row">
+                        .${ext.toLowerCase()} / ${sizeText}
+                    </div>
+                </div>
+                <button class="file-card-remove-btn" onclick="removeProjectionFile(${i})" title="Remove file">✕</button>
+            </div>
+        `;
+    }).join('');
 }
 
 // ── Run Analysis ────────────────────────────────────────────
@@ -1907,6 +2027,12 @@ async function uploadProjectionFiles() {
         return;
     }
 
+    const allProjectionDone = selectedProjectionFiles.every(f => (projectionFileProgress[f.name] !== undefined ? projectionFileProgress[f.name] >= 100 : true));
+    if (!allProjectionDone) {
+        showToast('Please wait for all files to finish uploading.', 'warning');
+        return;
+    }
+
     const btn = document.getElementById('uploadProjectionBtn');
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div> Uploading...';
@@ -1925,6 +2051,7 @@ async function uploadProjectionFiles() {
         }
 
         selectedProjectionFiles = [];
+        projectionFileProgress = {};
         renderProjectionFileList();
         showValidationSplitView(_currentValidationJobId);
     } catch (err) {
