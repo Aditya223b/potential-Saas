@@ -89,8 +89,8 @@ Examples:
 
     company_name = parsed["company_name"]
     print(f"\n  ✅ Company detected: {company_name}")
-    print(f"  ✅ Extracted {len(parsed['all_tables'])} tables")
-    print(f"  ✅ Total text length: {len(parsed['full_text']):,} characters")
+    print(f"  ✅ Gemini files uploaded: {len(parsed.get('gemini_files', []))}")
+    print(f"  ✅ Total text length: {len(parsed.get('full_text', '')):,} characters")
 
     # ── Step 2: Web Research ─────────────────────────────────────────────────
     print()
@@ -116,8 +116,7 @@ Examples:
 
     analysis = run_full_analysis(
         company_name=company_name,
-        pdf_text=parsed["full_text"],
-        tables=parsed["all_tables"],
+        gemini_files=parsed["gemini_files"],
         web_data=company_web.get("raw_data", ""),
         competitor_web_data=competitor_web,
     )
@@ -147,7 +146,7 @@ Examples:
         rec = analysis.get("recommendation", {})
         summary = analysis.get("financial_analysis", {}).get("executive_summary", "")
 
-        success = send_report_email(
+        ok, err = send_report_email(
             to_email=args.email,
             company_name=company_name,
             report_path=report_path,
@@ -155,8 +154,8 @@ Examples:
             recommendation=rec.get("recommendation", ""),
         )
 
-        if not success:
-            print("\n  ⚠️  Email sending failed, but the report has been saved locally.")
+        if not ok:
+            print(f"\n  ⚠️  Email sending failed: {err}. The report is still saved locally.")
     else:
         print("\n  ℹ️  Email skipped (--no-email flag)")
 

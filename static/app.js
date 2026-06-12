@@ -552,41 +552,35 @@ function renderProjectionFileList() {
 }
 
 // ── Run Analysis ────────────────────────────────────────────
-async function startAnalysis() {
-    if (selectedFiles.length === 0) return;
+async function startReactAnalysis(data) {
+    if (!data.files || data.files.length === 0) return;
 
     const formData = new FormData();
-    selectedFiles.forEach(f => formData.append('pdfs', f));
+    data.files.forEach(f => formData.append('pdfs', f));
     
-    const company = document.getElementById('companyNameInput').value.trim();
-    if (company) formData.append('company', company);
-
-    const companyWebsite = document.getElementById('companyWebsiteInput').value.trim();
-    if (companyWebsite) formData.append('company_website', companyWebsite);
-
-    const companyContext = normalizeWordLimitedText(document.getElementById('companyContextInput').value.trim(), 300);
-    if (companyContext) formData.append('company_context', companyContext);
+    if (data.company) formData.append('company', data.company.trim());
+    if (data.website) formData.append('company_website', data.website.trim());
+    if (data.notes) formData.append('company_context', normalizeWordLimitedText(data.notes.trim(), 300));
     
-    const email = document.getElementById('emailInput').value.trim();
-    if (email) formData.append('email', email);
-
-    const btn = document.getElementById('launchBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<div class="spinner"></div> Uploading...';
+    if (_user && _user.email) {
+        formData.append('email', _user.email);
+    }
+    
+    // Add modules based on role/depth/sectors if the backend expects them
+    // The previous implementation sent checked checkboxes. We will just send everything or standard.
+    // The backend uses data.get("modules") which isn't populated here. The backend doesn't seem to enforce it strictly or it was handled elsewhere.
+    // Wait, the previous startAnalysis didn't even append 'modules' to the formData!
 
     try {
         const res = await authFetch('/api/upload', { method: 'POST', body: formData });
-        const data = await res.json();
+        const resData = await res.json();
 
         if (!res.ok) {
-            showToast(data.error || 'Upload failed', 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i data-lucide="rocket" style="width: 14px; margin-right: 4px; vertical-align: text-bottom;"></i> Start Analysis';
-            lucide.createIcons();
+            showToast(resData.error || 'Upload failed', 'error');
             return;
         }
 
-        _currentJobId = data.job_id;
+        _currentJobId = resData.job_id;
         saveAppState('progress', _currentJobId);
         wizardSection.style.display = 'none';
         showProgressSection();
@@ -594,12 +588,9 @@ async function startAnalysis() {
         loadInProgressJobs(); // show new job in in-progress pane
     } catch (err) {
         showToast('Network error. Please try again.', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="rocket" style="width: 14px; margin-right: 4px; vertical-align: text-bottom;"></i> Start Analysis';
-        lucide.createIcons();
     }
 }
-window.startAnalysis = startAnalysis;
+window.startReactAnalysis = startReactAnalysis;
 
 // ── Progress Tracking ───────────────────────────────────────
 const STEP_CONFIG = {

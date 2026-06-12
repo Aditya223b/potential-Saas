@@ -151,8 +151,8 @@ def calculate_all_ratios(financials: dict) -> dict:
     # ── 4. SOLVENCY RATIOS ──────────────────────────────────────────────────
     ratios["Solvency Ratios"] = {
         "Debt-to-Equity Ratio": _ratio(
-            safe_divide(g("total_debt"), g("equity")),
-            benchmark="< 2.0",
+            safe_divide(g("total_debt"), g("equity")) if g("equity") and g("equity") > 0 else float("inf"),
+            benchmark="< 2.0 (positive equity)",
             good_max=2.0
         ),
         "Interest Coverage Ratio": _ratio(
@@ -199,7 +199,7 @@ def _ratio(
     """
     Format a single ratio with its benchmark and PASS/CAUTION/FAIL status.
     """
-    if value == 0 or value is None:
+    if value is None:
         status = "N/A"
     elif good_min is not None and good_max is not None:
         if good_min <= value <= good_max:

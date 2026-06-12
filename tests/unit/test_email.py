@@ -12,8 +12,9 @@ def test_send_email_success(mock_file, mock_exists, mock_smtp):
     
     with patch("config._get") as mock_get:
         mock_get.side_effect = lambda key, default="": "test@me.com" if "EMAIL" in key or "PASSWORD" in key else default
-        success = send_report_email("target@you.com", "Test Corp", "/tmp/path.docx", "Summary", "Buy")
-        assert success is True
+        ok, err = send_report_email("target@you.com", "Test Corp", "/tmp/path.docx", "Summary", "Buy")
+        assert ok is True
+        assert err == ""
         assert mock_inst.send_message.called
 
 @patch("smtplib.SMTP")
@@ -27,8 +28,9 @@ def test_send_email_auth_failure(mock_file, mock_exists, mock_smtp):
     mock_smtp.return_value.__enter__.return_value = mock_inst
     
     with patch("config._get", return_value="val"):
-        success = send_report_email("target@you.com", "Test Corp", "/tmp/path.docx", "Summary", "Buy")
-        assert success is False
+        ok, err = send_report_email("target@you.com", "Test Corp", "/tmp/path.docx", "Summary", "Buy")
+        assert ok is False
+        assert err != ""
 
 @patch("smtplib.SMTP")
 def test_send_email_missing_config(mock_smtp):

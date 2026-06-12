@@ -20,6 +20,7 @@ from flask import (
     Flask, render_template, request, jsonify, Response,
     send_file, stream_with_context, g
 )
+from werkzeug.utils import secure_filename
 
 import redis
 from rq import Queue
@@ -41,6 +42,17 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
+
+def _looks_like_pdf(buf: bytes) -> bool:
+    return buf[:4] == b"%PDF"
+
+def _safe_upload_path(upload_folder: str, filename: str) -> str:
+    """Return an absolute path inside upload_folder, refusing path traversal."""
+    base = secure_filename(filename) or "upload.bin"
+    path = os.path.realpath(os.path.join(upload_folder, base))
+    if not path.startswith(os.path.realpath(upload_folder)):
+        raise ValueError(f"Refused unsafe upload path: {filename!r}")
+    return path
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB max
@@ -340,6 +352,18 @@ def optional_auth():
     return None
 
 
+def _job_or_403(job_id: str):
+    """Load a job and verify the caller owns it.
+    Returns (job, None) on success or (None, error_response) on failure."""
+    job = get_job_object(job_id)
+    if not job:
+        return None, (jsonify({"error": "Job not found"}), 404)
+    user = getattr(g, "user", None)
+    if job.user_id and (not user or user["id"] != job.user_id):
+        return None, (jsonify({"error": "Forbidden"}), 403)
+    return job, None
+
+
 # ── Analysis Pipeline ────────────────────────────────────────────────────────────────────────
 
 
@@ -386,8 +410,7 @@ def run_extraction_pipeline(
         # Save the bytes to the Worker's local ephemeral filesystem
         os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
         for filename, pdf_bytes in zip(filenames, pdf_bytes_list):
-            safe_name = f"{job.job_id}_{filename}"
-            path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
+            path = _safe_upload_path(app.config["UPLOAD_FOLDER"], f"{job.job_id}_{filename}")
             with open(path, "wb") as f:
                 f.write(pdf_bytes)
             pdf_paths.append(path)
@@ -700,14 +723,18 @@ def upload():
     if not allowed:
         return jsonify({"error": reason}), 429
 
-    job_id = str(uuid.uuid4())[:8]
+    job_id = str(uuid.uuid4())
     pdf_bytes_list = []
     filenames = []
 
     for f in files:
-        if f.filename and f.filename.lower().endswith(".pdf"):
-            pdf_bytes_list.append(f.read())
-            filenames.append(f.filename)
+        if not (f.filename and f.filename.lower().endswith(".pdf")):
+            continue
+        blob = f.read()
+        if not _looks_like_pdf(blob):
+            return jsonify({"error": f"{f.filename}: not a valid PDF"}), 400
+        pdf_bytes_list.append(blob)
+        filenames.append(f.filename)
 
     if not pdf_bytes_list:
         return jsonify({"error": "No valid PDF files found"}), 400
@@ -737,10 +764,10 @@ def upload():
     return jsonify({"job_id": job_id})
 
 @app.route("/api/approve_financials/<job_id>", methods=["POST"])
+@require_auth
 def approve_financials(job_id):
-    job = get_job_object(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
 
     data = request.get_json()
     verified_financials = data.get("financials")
@@ -757,11 +784,11 @@ def approve_financials(job_id):
 
 
 @app.route("/api/upload_projection/<job_id>", methods=["POST"])
+@require_auth
 def upload_projection(job_id):
     """Upload company projection documents before analyst verification."""
-    job = get_job_object(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
 
     files = request.files.getlist("projection_files")
     if not files or all(f.filename == "" for f in files):
@@ -779,8 +806,7 @@ def upload_projection(job_id):
             filename = uploaded.filename or ""
             if not filename:
                 continue
-            safe_name = f"{job.job_id}_projection_{filename}"
-            path = os.path.join(app.config["UPLOAD_FOLDER"], safe_name)
+            path = _safe_upload_path(app.config["UPLOAD_FOLDER"], f"{job.job_id}_projection_{filename}")
             uploaded.save(path)
             projection_paths.append(path)
             projection_names.append(filename)
@@ -829,11 +855,11 @@ def upload_projection(job_id):
 
 
 @app.route("/api/skip_projection/<job_id>", methods=["POST"])
+@require_auth
 def skip_projection(job_id):
     """Skip projection upload and go straight to verification."""
-    job = get_job_object(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
 
     job.add_progress("projection", "ℹ️ Projection upload skipped by user", done=True)
     job.add_progress("validate", "⏳ Waiting for human validation of extracted financial data...")
@@ -843,11 +869,11 @@ def skip_projection(job_id):
 
 
 @app.route("/api/restart_job/<job_id>", methods=["POST"])
+@require_auth
 def restart_job(job_id):
     """Force restart a job if it gets stuck."""
-    job = get_job_object(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
 
     if job.status == "completed":
         return jsonify({"message": "Job already completed"}), 200
@@ -866,9 +892,10 @@ def restart_job(job_id):
     return jsonify({"error": "Cannot restart the extraction phase (PDFs not preserved in RAM). Please refresh and re-upload the PDF to start fresh."}), 400
 
 @app.route("/api/flag_for_review/<job_id>", methods=["POST"])
+@require_auth
 def flag_for_review(job_id):
-    job = get_job_object(job_id)
-    if not job: return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
     job.error = "Flagged for manual review by human analyst."
     job.add_progress("validate", "🛑 Flagged for manual review", done=True)
     job.set_status("failed")
@@ -930,23 +957,22 @@ def progress(job_id):
 
 
 @app.route("/api/result/<job_id>")
+@require_auth
 def result(job_id):
     """Get the full analysis result."""
-    job = get_job_object(job_id)
-    if job:
-        return jsonify(job.to_dict())
-        
-    return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
+    return jsonify(job.to_dict())
 
 
 @app.route("/api/source-preview/<job_id>")
+@require_auth
 def source_preview(job_id):
     """Return source metadata for a verified field."""
     year = request.args.get("year", "")
     field = request.args.get("field", "")
-    job = get_job_object(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
 
     preview = ((job.source_previews or {}).get(year, {}) or {}).get(field)
     source = ((job.extraction_sources or {}).get(year, {}) or {}).get(field)
@@ -1029,13 +1055,13 @@ def source_preview(job_id):
 
 
 @app.route("/api/source-image/<job_id>")
+@require_auth
 def source_image(job_id):
     """Serve a rendered preview image for a field's source evidence."""
     year = request.args.get("year", "")
     field = request.args.get("field", "")
-    job = get_job_object(job_id)
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
+    job, err = _job_or_403(job_id)
+    if err: return err
 
     preview = ((job.source_previews or {}).get(year, {}) or {}).get(field)
     image_base64 = (preview or {}).get("image_base64")
@@ -1050,21 +1076,28 @@ def source_image(job_id):
 
 
 @app.route("/api/download/<job_id>")
+@require_auth
 def download(job_id):
     """Download the generated DOCX report."""
-    job = get_job_object(job_id)
-    if not job or not job.report_path:
+    job, err = _job_or_403(job_id)
+    if err: return err
+    if not job.report_path:
         return jsonify({"error": "Report not available"}), 404
     return send_file(job.report_path, as_attachment=True, download_name=os.path.basename(job.report_path))
 
 
 @app.route("/api/email/<job_id>", methods=["POST"])
+@require_auth
 def send_email(job_id):
     """Send the report via email, attaching the DOCX from Supabase Storage if available."""
-    data = request.get_json()
-    email = data.get("email", "").strip()
+    job, err = _job_or_403(job_id)
+    if err: return err
+    data = request.get_json() or {}
+    email = data.get("email", "").strip().lower() or g.user.get("email", "").lower()
     if not email:
         return jsonify({"error": "Email is required"}), 400
+    if email != g.user.get("email", "").lower():
+        return jsonify({"error": "Recipient must match your account email"}), 403
 
     analysis_data = None
     company_name = "Unknown"
@@ -1073,67 +1106,40 @@ def send_email(job_id):
     recommendation = ""
     summary = ""
 
-    # Try resolving as an active Redis job first
-    job = get_job_object(job_id)
-    if job and job.result:
+    if job.result:
         analysis_data = job.result
         company_name = job.result.get("company_name", "Unknown")
         report_path_to_use = job.report_path
-        storage_path = job.result.get("_report_storage_path") or (f"{job.user_id}/{job.job_id}.docx" if job.user_id else None)
+        storage_path = job.result.get("_report_storage_path") or (
+            f"{job.user_id}/{job.job_id}.docx" if job.user_id else None
+        )
         rec = job.result.get("recommendation", {})
         recommendation = rec.get("recommendation", "") if isinstance(rec, dict) else str(rec)
         summary = job.result.get("financial_analysis", {}).get("executive_summary", "")
     else:
-        # Fallback 1: Might be a purely historical UUID
-        # Fallback 2: Might be an active Redis job_id that expired from Redis, but was saved to 'analyses'
-        import uuid
+        # Redis job expired — look up the saved analyses table (user already verified)
         try:
-            uuid.UUID(job_id)
-            is_uuid = True
-        except ValueError:
-            is_uuid = False
-            
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split("Bearer ", 1)[1].strip()
-            from supabase_client import verify_user_token, _get_admin_client
-            user = verify_user_token(token)
-            if user:
-                try:
-                    query = _get_admin_client().table("analyses").select("*").eq("user_id", user["id"])
-                    if is_uuid:
-                        query = query.eq("id", job_id)
-                    else:
-                        query = query.eq("job_id", job_id)
-                    
-                    res = query.order('created_at', desc=True).limit(1).execute()
-                    hist_data = res.data[0] if res.data else None
-                except Exception as e:
-                    logger.error(f"[{job_id}] Fallback query failed: {e}")
-                    hist_data = None
-                
-                if hist_data:
-                    logger.info(f"[{job_id}] found fallback analysis_data")
-                    analysis_data = hist_data.get("analysis_data", {})
-                    company_name = hist_data.get("company_name", "Unknown")
-                    storage_path = hist_data.get("report_storage_path")
-                    
-                    rec = hist_data.get("recommendation", {})
-                    if isinstance(rec, dict):
-                        recommendation = rec.get("recommendation", "N/A")
-                    else:
-                        recommendation = str(rec)
-                        
-                    summary = analysis_data.get("financial_analysis", {}).get("executive_summary", "")
-                else:
-                    logger.error(f"[{job_id}] fallback query returned None")
-            else:
-                logger.error(f"[{job_id}] verify_user_token failed")
-        else:
-            logger.error(f"[{job_id}] missing or invalid Authorization header")
+            from supabase_client import _get_admin_client
+            query = _get_admin_client().table("analyses").select("*").eq("user_id", g.user["id"])
+            try:
+                import uuid; uuid.UUID(job_id); query = query.eq("id", job_id)
+            except ValueError:
+                query = query.eq("job_id", job_id)
+            res = query.order("created_at", desc=True).limit(1).execute()
+            hist_data = res.data[0] if res.data else None
+        except Exception as e:
+            logger.error(f"[{job_id}] Fallback query failed: {e}")
+            hist_data = None
+
+        if hist_data:
+            analysis_data = hist_data.get("analysis_data", {})
+            company_name = hist_data.get("company_name", "Unknown")
+            storage_path = hist_data.get("report_storage_path")
+            rec = hist_data.get("recommendation", {})
+            recommendation = rec.get("recommendation", "N/A") if isinstance(rec, dict) else str(rec)
+            summary = analysis_data.get("financial_analysis", {}).get("executive_summary", "")
 
     if not analysis_data:
-        logger.error(f"[{job_id}] returning 'Analysis not complete or not found'")
         return jsonify({"error": "Analysis not complete or not found (Redis expired, no save found)"}), 400
 
     # ── Resolve the DOCX path ────────────────────────────────────────────────
@@ -1187,8 +1193,9 @@ def send_email(job_id):
 @require_auth
 def manual_save_analysis(job_id):
     """Manually persist the analysis into Supabase history."""
-    job = get_job_object(job_id)
-    if not job or not job.result:
+    job, err = _job_or_403(job_id)
+    if err: return err
+    if not job.result:
         return jsonify({"error": "Analysis result not found or not complete."}), 404
 
     from supabase_client import save_analysis

@@ -18,13 +18,13 @@ def send_report_email(
     report_path: str,
     analysis_summary: str = "",
     recommendation: str = "",
-) -> bool:
+) -> tuple[bool, str]:
     """
     Send the financial analysis report as an email attachment.
 
     Returns:
-        (True, "") on success
-        (False, error_reason_str) on failure
+        (True, "")              on success
+        (False, error_str)      on failure
     """
     # ── Resolve credentials ──────────────────────────────────────────────────
     try:
